@@ -37,7 +37,8 @@
       type(el4loop), dimension(nelem_dg), intent(in) :: el_new 
       
 ! GENERAL
-      character*70 :: file_monitor, file_outU1, file_outU0, file_outV1, filePG, file_trav_load, file_outXYZ
+      character*70 :: file_monitor, file_outU1, file_outU0, file_outV1, & 
+                      file_outSV, filePG, file_trav_load, file_outXYZ
       character*70 :: file_fe0, file_fe1
       integer*4 :: unit_fe0, unit_fe1
 
@@ -361,9 +362,15 @@
         file_outU1 = bkp_file(1:len_trim(bkp_file)) // '/U1_'
         file_outV1 = bkp_file(1:len_trim(bkp_file)) // '/V1_'   
         file_outXYZ = bkp_file(1:len_trim(bkp_file)) // '/XYZ_'
+        if (damping_type .eq. 2 ) then 
+           file_outSV = bkp_file(1:len_trim(bkp_file)) // '/SV_'
+        endif        
      else
         file_outU0 = 'U0_'; file_outU1 = 'U1_'; file_outV1 = 'V1_'
         file_outXYZ = 'XYZ_'; 
+        
+        if (damping_type .eq. 2 ) file_outSV = 'SV_'
+        
      endif
         
       if (tstart .gt. 0.0d0) then
@@ -373,6 +380,11 @@
          call READ_FILEOUT(file_outU0,isnap,mpi_id,3*nnod_loc,u0)
          call READ_FILEOUT(file_outU1,isnap,mpi_id,3*nnod_loc,u1)
          call READ_FILEOUT(file_outV1,isnap,mpi_id,3*nnod_loc,v1)
+         
+         if (damping_type .eq. 2) then
+           call READ_FILEOUT_VS(file_outSV,isnap,mpi_id,6*nnod_loc,N_SLS,strain_visc)
+         endif  
+         
          isnap = isnap + 1;
          
       else 
@@ -941,25 +953,25 @@
 !---------------------------------------------------------------------------
 !     EXCHANGE U0, U1 & V1 VALUES
 !---------------------------------------------------------------------------
-            if (restart .eq. 1) then 
-                do i = 1,nsend
-                   in = node_send(i)
-                   send_buffer(3*(i -1) +1) = u0(3*(in -1) +1)
-                   send_buffer(3*(i -1) +2) = u0(3*(in -1) +2)
-                   send_buffer(3*(i -1) +3) = u0(3*(in -1) +3)
-                enddo
+!            if (restart .eq. 1) then 
+!                do i = 1,nsend
+!                   in = node_send(i)
+!                   send_buffer(3*(i -1) +1) = u0(3*(in -1) +1)
+!                   send_buffer(3*(i -1) +2) = u0(3*(in -1) +2)
+!                   send_buffer(3*(i -1) +3) = u0(3*(in -1) +3)
+!                enddo
                 
-                call EXCHANGE_DOUBLE(3*nsend,send_buffer,3*nrecv,recv_buffer,&
-                                     mpi_np,send_length,recv_length,&
-                                     mpi_comm,mpi_stat,mpi_ierr,mpi_id)
+!                call EXCHANGE_DOUBLE(3*nsend,send_buffer,3*nrecv,recv_buffer,&
+!                                     mpi_np,send_length,recv_length,&
+!                                     mpi_comm,mpi_stat,mpi_ierr,mpi_id)
                   
-                do i = 1,nrecv
-                   in = node_recv(i)
-                   u0(3*(in -1) +1) = recv_buffer(3*(i -1) +1) 
-                   u0(3*(in -1) +2) = recv_buffer(3*(i -1) +2)
-                   u0(3*(in -1) +3) = recv_buffer(3*(i -1) +3)
-                enddo
-            endif
+!                do i = 1,nrecv
+!                   in = node_recv(i)
+!                   u0(3*(in -1) +1) = recv_buffer(3*(i -1) +1) 
+!                   u0(3*(in -1) +2) = recv_buffer(3*(i -1) +2)
+!                   u0(3*(in -1) +3) = recv_buffer(3*(i -1) +3)
+!                enddo
+!            endif
 
             do i = 1,nsend
                in = node_send(i)
@@ -2286,8 +2298,27 @@
 !
 !           
 !    endif
+!---------------------------------------------------------------------------
+!     UPDATE VARIABLES
+!---------------------------------------------------------------------------
+       
+      if (rk_scheme .eq. 'RUNGEKUTTA') then
+         v1 = v2
+         u1 = u2
+      else
+         v1 = (u2-u0)/(2.0d0*deltat) 
+         u0 = u1
+         u1 = u2
+      endif
+          
+      if (its .le. 200) then 
+          call MPI_BARRIER(mpi_comm, mpi_ierr)
+          final_time = MPI_WTIME()
+          if (mpi_id .eq. 0) write(*,*) 'Time for a single step', final_time - start_time
+      endif
 
-      
+
+
 !---------------------------------------------------------------------------
 !     WRITE BACKUP FILES
 !---------------------------------------------------------------------------
@@ -2312,29 +2343,20 @@
                                         xx_spx_loc,yy_spx_loc,zz_spx_loc,&
                                         local_node_num,tstart)
 
+              if (damping_type .eq. 2) then
+                  
+                call WRITE_FILEOUT_GRID_SV(file_outSV,file_outXYZ,isnap,mpi_id,6*nnod_loc,N_SLS,strain_visc,& 
+                                         xx_spx_loc,yy_spx_loc,zz_spx_loc,&
+                                         local_node_num,tstart)
+              endif    
+
+
                
                isnap = isnap + 1
                
     endif
 
-!---------------------------------------------------------------------------
-!     UPDATE VARIABLES
-!---------------------------------------------------------------------------
-       
-      if (rk_scheme .eq. 'RUNGEKUTTA') then
-         v1 = v2
-         u1 = u2
-      else
-         v1 = (u2-u0)/(2.0d0*deltat) 
-         u0 = u1
-         u1 = u2
-      endif
-          
-      if (its .le. 200) then 
-          call MPI_BARRIER(mpi_comm, mpi_ierr)
-          final_time = MPI_WTIME()
-          if (mpi_id .eq. 0) write(*,*) 'Time for a single step', final_time - start_time
-      endif
+
 
          
 !---------------------------------------------------------------------------

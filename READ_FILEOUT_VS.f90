@@ -26,12 +26,12 @@
 !> @param[in] nb_vec  number of values
 !> @param[out]  vec  values read
 
-      subroutine READ_FILEOUT(filename,counter,procs,nb_vec,vec)
+      subroutine READ_FILEOUT_VS(filename,counter,procs,nb_vec,ncol,vec)
       
       implicit none
       
-      integer*4 :: counter,procs,nb_vec
-      real*8, dimension(nb_vec) :: vec
+      integer*4 :: counter,procs,nb_vec, ncol
+      real*8, dimension(nb_vec,ncol) :: vec
       character*70 :: filename
       
       character*70 :: out_file
@@ -74,7 +74,7 @@
       
       
       do i = 1,nb_vec
-         read(20+procs,*) vec(i)
+         read(20+procs,*) vec(i,:)
       enddo
       
       close(20+procs)
@@ -84,6 +84,6 @@
       
       return
       
-      end subroutine READ_FILEOUT
+      end subroutine READ_FILEOUT_VS
       
 

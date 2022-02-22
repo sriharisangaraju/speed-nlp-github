@@ -519,10 +519,11 @@
 				  node1_elev,node2_elev,node3_elev,&			
 				  max_elev_spacing)
 				  					
-		if(tcase .eq. 19 .or. tcase .eq. 21 .or. tcase .eq. 29) call READ_FILEXYZ(file_case_all,n_all,n_tria_all,&					
-				  x_all,y_all,z_all,&					
-				  node1_all,node2_all,node3_all,&			
-				  max_all_spacing)					
+		if(tcase .eq. 19 .or. tcase .eq. 21 .or. tcase .eq. 29) &
+		   call READ_FILEXYZ(file_case_all,n_all,n_tria_all,&					
+			            	 x_all,y_all,z_all,&					
+				             node1_all,node2_all,node3_all,&			
+				             max_all_spacing)					
 
         
         call READ_FILEVS(file_case_vs, n_tria_elev, vs_elev, sedim)

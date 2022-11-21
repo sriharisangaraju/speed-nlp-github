@@ -22,7 +22,8 @@
 !> @version 1.0
 !> @param[in] filemate  file name (*.mate)
 !> @param[in] nb_mate  number of materials
-!> @param[in] nb_mate_nle  number of non-linear materials
+!> @param[in] nb_mate_nle  number of non-linear Elastic materials
+!> @param[in] nb_mate_nlp  number of non-linear Plastic materials
 !> @param[in] nb_diriX  number of Dirichlet boundary conditions (x-dir)
 !> @param[in] nb_diriY  number of Dirichlet boundary conditions (y-dir)
 !> @param[in] nb_diriZ  number of Dirichlet boundary conditions (z-dir)
@@ -132,11 +133,16 @@
 !> @param[out] lab_fnc  label for time functions
 !> @param[out] fmax  max frequency of the plane wave load 
 !> @param[out] fpeak peak frequency for non lienar damping
+!> @param[out] functag_mat_nlp    Defined Function ID, that defines G/Gmax curve
+!> @param[out] nlp_pressdep_flag  Pressure Dependent or Pressure Independent 
+!> @param[out] nlp_effstress_flag Effective Stress or Total Stress Formulation to use
 
 
       subroutine READ_FILEMATE(filemate,nb_mate,char_mat,type_mat,trefm,lab_mat,Qua_S,Qua_P, &
                                   nb_mate_nle,char_mat_nle,val_mat_nle,type_mat_nle,lab_mat_nle, & 
                                   nb_mate_rnd, lab_mat_rnd, &     
+                                  nb_mate_nlp, lab_mat_nlp, functag_mat_nlp,&
+                                  nlp_pressdep_flag, nlp_effstress_flag, &
                                   nb_diriX,val_diriX,fnc_diriX,lab_diriX, &
                                   nb_diriY,val_diriY,fnc_diriY,lab_diriY, &
                                   nb_diriZ,val_diriZ,fnc_diriZ,lab_diriZ, &
@@ -169,7 +175,7 @@
                                   nb_case,val_case,lab_case,tol_case, & 
                                   nb_nhee,val_nhe,tol_nhe, &
                                   nb_fnc,type_fnc,ind_fnc,dat_fnc,lab_fnc,nb_fnc_data, &
-                                  fmax,fpeak,damping_val)
+                                  fmax,fpeak,fref,damping_val)
 
 
       use speed_exit_codes
@@ -182,7 +188,7 @@
       character*4 :: keyword
 
       integer*4 :: nb_mate,nb_fnc, nb_fnc_data, nb_frac, damping_val
-      integer*4 :: nb_mate_nle, nb_mate_rnd, nb_nhee
+      integer*4 :: nb_mate_nle, nb_mate_rnd, nb_nhee, nb_mate_nlp
       integer*4 :: nb_diriX,nb_diriY,nb_diriZ,nb_neuX,nb_neuY,nb_neuZ
       integer*4 :: nb_neuN 
       integer*4 :: nb_poiX,nb_poiY,nb_poiZ,nb_forX,nb_forY,nb_forZ,nb_forF
@@ -194,7 +200,7 @@
       integer*4 :: icase,nb_case                                        
       
       integer*4 :: im,ifunc,idf,ndat_fnc,file_nd, inhee
-      integer*4 :: im_nle, im_rnd        
+      integer*4 :: im_nle, im_rnd, im_nlp        
       integer*4 :: idX,idY,idZ,inX,inY,inZ, itX, itY, itZ
       integer*4 :: inN, itest 
       integer*4 :: ipX,ipY,ipZ,ifX,ifY,ifZ,iff
@@ -203,6 +209,7 @@
       integer*4 :: ileft,iright
       integer*4 :: i,j,dummy,status
       integer*4 :: ntest, srcmodflag, szsism
+      integer*4 :: dum_nlp_pressdep_flag, dum_nlp_effstress_flag
 
       integer*4, dimension(nb_diriX) :: fnc_diriX,lab_diriX
       integer*4, dimension(nb_diriY) :: fnc_diriY,lab_diriY
@@ -238,16 +245,20 @@
       integer*4, dimension(nb_fnc) :: lab_fnc
       integer*4, dimension(nb_fnc +1) :: ind_fnc
       integer*4, dimension(nb_mate_nle) :: lab_mat_nle   
-      integer*4, dimension(nb_mate_rnd) :: lab_mat_rnd                             
+      integer*4, dimension(nb_mate_rnd) :: lab_mat_rnd 
       
       integer*4, dimension(nb_mate_nle) :: type_mat_nle                
       integer*4, dimension(nb_mate_nle,1) :: char_mat_nle        
       integer*4, dimension(nb_case) :: val_case
       integer*4, dimension(nb_nhee) :: val_nhe
+      integer*4, dimension(nb_mate_nlp) :: lab_mat_nlp, functag_mat_nlp
+      
+      logical :: nlp_pressdep_flag, nlp_effstress_flag 
 
-      real*8 :: fmax                                                                
+      real*8 :: fmax, fref                                                                
       real*8 :: fpeak                                                                
       real*8 :: rho, VS, VP
+      real*8 :: ref_strain    ! For Hyperbolic G/Gmax curve -> NL-P Material
       
       real*8, dimension(nb_case) :: tol_case
       real*8, dimension(nb_nhee) :: tol_nhe
@@ -299,10 +310,12 @@
       
       ifunc = 0
       fmax = 0.d0
+      fref = 0.d0
 
-      inhee = 0;
-  
-      
+      inhee = 0;  im_nlp = 0;
+
+      dum_nlp_pressdep_flag = 0;    dum_nlp_effstress_flag = 0;
+      nlp_pressdep_flag = .false.;        nlp_effstress_flag = .false.;
       
       if (nb_fnc.gt.0) ind_fnc(1) = 1
       
@@ -353,6 +366,15 @@
             im_nle = im_nle + 1                                                          
             read(inline(ileft:iright),*) lab_mat_nle(im_nle),type_mat_nle(im_nle),&                              
                              char_mat_nle(im_nle,1),val_mat_nle(im_nle,1)                         
+
+           case('MATP')       
+            ! Nonlinear - with Plasticity + similar damping as that in 'MATE' material                                                    
+            im_nlp = im_nlp + 1       
+            ! lab = mesh block id; type = spectral degree; functag = Function tag which specifies G/Gmax curve
+            read(inline(ileft:iright),*) lab_mat_nlp(im_nlp), functag_mat_nlp(im_nlp),&
+                              dum_nlp_pressdep_flag, dum_nlp_effstress_flag
+            if (dum_nlp_effstress_flag.eq.1) nlp_pressdep_flag = .true.
+            if (dum_nlp_pressdep_flag.eq.1) nlp_pressdep_flag = .true.
          
            case('MATR')                                                                        
             im_rnd = im_rnd + 1                                                                                        
@@ -543,6 +565,9 @@
 
            case('FPEK') 
               read(inline(ileft:iright),*) fpeak        
+
+           case('FREF')          ! Damping Type 4
+               read(inline(ileft:iright),*) fref       
               
 !           case('SLIP')
 !              read(inline(ileft:iright),*) slip_type   
@@ -637,6 +662,33 @@
                  ind_fnc(ifunc +1) = ind_fnc(ifunc) + 2*ndat_fnc                  
                  read(inline(ileft:iright),*)dummy,dummy,dummy,&                 
                     (dat_fnc(j), j = ind_fnc(ifunc),ind_fnc(ifunc +1) -1)     
+
+               case(70)
+                  ! Hyperbolic G/Gmax Curve - Hardin and Drnevich (1972)
+                  ! FunctionLabel;  FunctionType(i.e 70 or 71); No.of Iwan Springs; ref_strain
+                  ind_fnc(ifunc +1) = ind_fnc(ifunc) + 2
+                  read(inline(ileft:iright),*)dummy,dummy,&
+                     (dat_fnc(j), j = ind_fnc(ifunc),ind_fnc(ifunc +1) -1)                    
+
+               ! case(71)
+               !    ! User Defined G/Gmax Curve (External Ascii file with data in two columns)
+               !    ! First Column - Strain Values      Second Column - Corresponding G/Gmax value
+               !    read(inline(ileft:iright),*)dummy,dummy,ndat_fnc,fileinput
+               !    ind_fnc(ifunc +1) = ind_fnc(ifunc) + 2*ndat_fnc
+               !    open(24,file=fileinput)
+
+               !    read(24,*) file_nd
+               !    if (ndat_fnc .ne. file_nd) then
+               !      write(*,*) 'Error reading function ! ndat_fnc .ne. file_nd !'
+               !      write(*,*) 'Error reading function from file ', trim(fileinput), '!'
+               !      write(*,*) 'Line numbers not consistent with material file.'
+               !      call EXIT(EXIT_FUNCTION_ERROR)
+               !    endif
+               !    do j = 1, file_nd
+               !      i = ind_fnc(ifunc) + 2*(j -1)
+               !      read(24,*) dat_fnc(i), dat_fnc(i +1)
+               !    enddo
+               !    close(24)
                
                case(99)
                  ind_fnc(ifunc +1) = ind_fnc(ifunc) + 2

@@ -135,12 +135,13 @@
                 write(*,'(A)')'ATT: There are no materials with damping defined on'        
         endif
         
-     elseif(damping_type .eq. 2) then !Standard Linear Solid damping
+     elseif(damping_type .eq. 2) then !Standard Linear Solid damping (Frequency Independent damping)
         if(mpi_id.eq.0) then   
                 write(*,'(A)')                     
                 write(*,'(A)') '------------Computing anelastic coefficients-----------'
         endif
         !Assume 3 SLS for a range ~ [fmax/10, fmax*10] Hz
+        N_SLS = 3
         allocate(Y_lambda(nmat,N_SLS),Y_mu(nmat,N_SLS),frequency_range(N_SLS))
         
         Y_lambda=0.d0;  Y_mu=0.d0;         
@@ -175,7 +176,33 @@
               
         if (fmax .ne. 0.d0) &                
             call MAKE_RAYLEIGH_COEFFICIENTS(nmat, A0_ray, A1_ray, prop_mat, QS, fmax,mpi_id)
-         
+
+      elseif(damping_type.eq.4) then !Standard Linear Solid damping (Frequency Independent damping based on Liu & Archuleta 2006)
+         if(mpi_id.eq.0) then   
+            write(*,'(A)')                     
+            write(*,'(A)') '------Computing Visco-Elatic Parameters (Liu & Archuleta 2006)-------'
+            if ((ncase .gt. 0) .or. (nmat_nhe .gt. 0)) then
+               write(*,'(A)')                     
+               write(*,'(A)') 'Not-Honoring Approaches are not implemented for Damping Type 4'
+               call exit(EXIT_SETUP)
+            endif
+            if (fref.le.0.d0) then
+               write(*,'(A)')                     
+               write(*,'(A)') 'Reference Frequency is not defined in *.mate file'
+               call exit(EXIT_SETUP)
+            endif
+         endif
+
+         N_SLS = 8;
+         allocate(Trelax(N_SLS), visc_Mu(nmat), visc_Mp(nmat), &
+                  visc_wgt_s(nmat,N_SLS), visc_wgt_p(nmat,N_SLS))
+         call MAKE_VISCOELASTIC_LIU_ARCHULETA(nmat, N_SLS, prop_mat, QS, QP, fref, &
+                                             Trelax, visc_wgt_s, visc_wgt_p, &
+                                             visc_Mu, visc_Mp)
+
+         if (nmat_nlp .gt. 0) then
+            call MAKE_NLP_IWANSPRING_YIELDVALUES()
+         endif
      endif   
       
 

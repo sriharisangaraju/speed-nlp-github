@@ -4,8 +4,8 @@ OBJS=$(SRCS:.f90=.o)
 FC_PC=mpif90
 
 
-FC_PC_FLAGS=-O5 -g -c -cpp -ffree-form -ffree-line-length-none -fopenmp -fbounds-check -DPETSC_AVOID_MPIF_H
-LD_PC_FLAGS=-O5  -fopenmp  /opt/metis-4.0.3/libmetis.a
+FC_PC_FLAGS=-O5 -g -c -cpp -ffree-form -ffree-line-length-none -fopenmp -fbounds-check -DPETSC_AVOID_MPIF_H -fallow-argument-mismatch
+LD_PC_FLAGS=-O5  -fopenmp  /Users/srihari/apps/metis-clang/5.1.0/build/Darwin-arm64/libmetis/libmetis.a
 
 PETSC_LD_FLAGS=
 PETSC_FC_FLAGS=

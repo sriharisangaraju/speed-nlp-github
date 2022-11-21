@@ -123,7 +123,7 @@
       if(filefound .eqv. .FALSE.) call EXIT(EXIT_MISSING_FILE)
       
       call READ_DIME_FILEMATE(mat_file,nmat, &
-                            nmat_nle, nmat_rnd, &                                                                        
+                            nmat_nle, nmat_rnd, nmat_nlp, &                                                                        
                             nload_dirX_el,nload_dirY_el,nload_dirZ_el, &
                             nload_neuX_el,nload_neuY_el,nload_neuZ_el, &
                             nload_neuN_el, &                                                            
@@ -142,6 +142,7 @@
       if (mpi_id.eq.0) then
          write(*,'(A,I8)') 'Materials        : ',nmat
          if(nmat_nle.gt.0) write(*,'(A,I8)')     'Materials NL-El. : ',nmat_nle        
+         if(nmat_nlp.gt.0) write(*,'(A,I8)')     'Materials NL-Plasticity. : ',nmat_nlp     
          if(nmat_rnd.gt.0) write(*,'(A,I8)')     'Materials Random : ',nmat_rnd        
          if(nload_dirX_el.gt.0) write(*,'(A,I8)')'Dirichlet X B.C. : ',nload_dirX_el
          if(nload_dirY_el.gt.0) write(*,'(A,I8)')'Dirichlet Y B.C. : ',nload_dirY_el
@@ -190,6 +191,7 @@
       allocate (type_mat(nmat), tref_mat(nmat), prop_mat(nmat,4), sdeg_mat(nmat), tag_mat(nmat))
 
       if (nmat_nle.gt.0) allocate(type_mat_nle(nmat_nle), prop_mat_nle(nmat_nle,1), val_mat_nle(nmat_nle,1), tag_mat_nle(nmat_nle))
+      if (nmat_nlp.gt.0) allocate(tag_mat_nlp(nmat_nlp), functag_mat_nlp(nmat_nlp))
       if (nmat_rnd.gt.0) allocate(rand_mat(nmat_rnd))
       
       if (nload_dirX_el.gt.0) allocate (val_dirX_el(nload_dirX_el,4), fun_dirX_el(nload_dirX_el), tag_dirX_el(nload_dirX_el))      
@@ -254,10 +256,14 @@
       
       
       allocate(QS(nmat), QP(nmat)); QS = 0.d0; QP = 0.d0;
+
+      ! For nonLinear Plasticity only Damping_type of 4 should be used
+      if (nmat_nlp.gt.0) damping_type = 4;
             
       call READ_FILEMATE(mat_file,nmat,prop_mat,type_mat,tref_mat,tag_mat, QS, QP,&
                 nmat_nle,prop_mat_nle,val_mat_nle,type_mat_nle,tag_mat_nle, &   
                 nmat_rnd, rand_mat, &     
+                nmat_nlp, tag_mat_nlp, functag_mat_nlp, nlp_pressdep_flag, nlp_effstress_flag, &    ! NL-P Material data
                 nload_dirX_el,val_dirX_el,fun_dirX_el,tag_dirX_el, &
                 nload_dirY_el,val_dirY_el,fun_dirY_el,tag_dirY_el, &
                 nload_dirZ_el,val_dirZ_el,fun_dirZ_el,tag_dirZ_el, &
@@ -290,9 +296,7 @@
                 n_case,val_case,tag_case,tol_case, &
                 nmat_nhe,val_nhe,tol_nhe, &                                 
                 nfunc,func_type,func_indx,func_data,tag_func,nfunc_data, &
-                fmax,fpeak,damping_type)
-                
-
+                fmax,fpeak,fref,damping_type)
                 
                  
 
@@ -450,7 +454,18 @@
              write(*,'(A)')'ERROR: Peak frequency for damping not defined!'                                
              call EXIT(EXIT_DAMPING_PEAK)
          endif                                                                                                   
-       endif                                                                                                
+      endif             
+
+      if (mpi_id.eq.0) then                                                                                
+        write(*,'(A)')                                                                                
+        do im_nlp = 1,nmat_nlp                                                                               
+          write(*,'(A,I8)') 'NON LINEAR Plastic - MATERIAL : ',tag_mat_nlp(im_nlp)
+          write(*,'(A,I8)') '    G/Gmax Curve Function        : ',functag_mat_nlp(im_nlp) 
+          write(*,'(A,L8)') '    Pressure Dependent Model     : ',nlp_pressdep_flag
+          write(*,'(A,L8)') '    Effective Stress Formulation : ',nlp_effstress_flag
+          write(*,*)                                                                                        
+        enddo                                                                                             
+     endif 
       
 
       grid_file = grid_file(1:len_trim(grid_file)) // '.mesh'    

@@ -86,6 +86,8 @@
       if (trof .eq. 0 .and. nelem_dg_glo .gt. 0) deallocate(local_node_num_dg)
       if (damping_type .eq. 2) deallocate(frequency_range,Y_lambda,Y_mu)
       if (damping_type .eq. 3) deallocate(A0_ray, A1_ray)
+      if (damping_type .eq. 4) deallocate(visc_Mu, visc_Mp, visc_wgt_s, visc_wgt_p, Trelax, exp_Trelax)
+      !if (nmat_nlp .gt. 0) deallocate(mpii_mat, nlp_elem, tag_mat_nlp, functag_mat_nlp)
       if (nmat_rnd .gt. 0) deallocate(lambda_rnd,mu_rnd,rho_rnd)
       if (nmat_nhe .gt. 0) deallocate(lambda_nhe,mu_nhe,rho_nhe, Qs_nhe_el, Qp_nhe_el) !Gamma_nhe_el)
 

@@ -234,6 +234,9 @@ module speed_par
       logical, parameter :: b_setuponly_default = .FALSE.
       logical, parameter :: b_failCFL_default = .FALSE.
       logical, parameter :: b_instabilitycontrol_default = .FALSE.
+
+      ! NL - P Material
+      logical :: nlp_pressdep_flag, nlp_effstress_flag
       
 !************************************************************************************
 !                                    CHARACTERS
@@ -262,7 +265,7 @@ module speed_par
 ! COUNTERS
       integer*4 :: im_pgm, im_lst, &
                    im, ie, i, j, k, h, in, ic, id, &
-                   ip, ielem, i4t, im_nle
+                   ip, ielem, i4t, im_nle, im_nlp
 
 
 ! MAX RANGE NUMBER  
@@ -292,7 +295,7 @@ module speed_par
                    nnode_dom, nelem_dom, edgecut, &
                    nmat_nle, total_els, nvec, &
                    nargs, ntime_err, n_test, n_frac, &
-                   num_testcase, label_testcase, nmat_rnd, nmat_nhe
+                   num_testcase, label_testcase, nmat_rnd, nmat_nhe, nmat_nlp
                    
 ! 0/1 INTERGERS
       integer*4 :: file_mon_pgm, file_mon_lst, &
@@ -301,7 +304,7 @@ module speed_par
       
 ! DAMPING
       integer*4 :: damping_type
-      integer*4, parameter :: N_SLS = 3
+      integer*4 :: N_SLS         ! If Damping Type is 4, N_SLS is automatically changed to 8
           
             
 ! OTHER       
@@ -370,6 +373,9 @@ module speed_par
       integer*4, dimension (:), allocatable :: itersnap, vec, i4count, &
                                                type_mat_nle, tag_mat_nle, rand_mat
 
+! NL-P Material
+      integer*4, dimension (:), allocatable :: tag_mat_nlp, functag_mat_nlp
+
 ! Not-Honoring Enhanced
       integer*4, dimension(:), allocatable :: val_nhe, tol_nhe
 
@@ -388,7 +394,7 @@ module speed_par
      real*8 :: &  
                deltat, deltat_cfl, tstart, tstop, time_in_seconds, start1, start2, &
                start, finish, &                        ! TIME VARIABLES
-               fmax, fpeak, &                          ! FREQUENCY                      
+               fmax, fpeak, fref, &                    ! FREQUENCY                      
                xx_macro, yy_macro, zz_macro, &         ! NODES
                depth_search_mon_pgm, rotation_angle_mon_pgm, depth_search_mon_lst, &        ! MONITORS
                dg_c, pen_c, &                          ! DG CONSTANTS
@@ -426,6 +432,10 @@ module speed_par
       real*8, dimension(:), allocatable :: QS, QP, frequency_range
       real*8, dimension(:,:), allocatable:: Y_lambda,Y_mu
       real*8, dimension(:), allocatable :: A0_ray, A1_ray
+      ! DAMPING TYPE - 4
+      real*8, dimension(:), allocatable   :: Trelax, exp_Trelax, visc_Mu, visc_Mp
+      real*8, dimension(:,:), allocatable :: visc_wgt_s, visc_wgt_p               
+      real*8, dimension(:,:), allocatable :: zeta_node_t0, zeta_node_t1  ! These two are memory variables for damping/ occupies a bit of memory [size = 8bytes* (6*nnod_loc)*(NSLS=8)]
 
 
 ! RANDOM 
@@ -455,7 +465,10 @@ module speed_par
               val_traX_el, val_traY_el, val_traZ_el, &
               val_mat_nle, prop_mat, val_dg_frc
 
-              
+! (MATRICES FOR) Nonlinear - Plastic Material
+!      real*8, dimension(:,:), allocatable :: &
+!                  
+
 ! (MATRICES FOR) SEISMIC MOMENT OR EXPLOSIVE SOURCE                       
       real*8, dimension (:,:), allocatable :: &
               factor_seismic_moment, tau_seismic_moment, dist_sour_node_sism, check_dist_node_sism, &        
@@ -517,6 +530,9 @@ module speed_timeloop
                         !(NLE) MATERIALS
                          nmat, tag_mat, type_mat, sdeg_mat, tref_mat, prop_mat, &
                          nmat_nle,  tag_mat_nle, type_mat_nle, prop_mat_nle, val_mat_nle, fpeak, &
+
+                        ! Nonlinear - Plasticity (Iwan's Springs)
+                        nmat_nlp, tag_mat_nlp, functag_mat_nlp, nlp_pressdep_flag, nlp_effstress_flag, &
                          
                         !RAND MATERIALS
                         nmat_rnd, rand_mat, lambda_rnd, mu_rnd, rho_rnd, &
@@ -559,7 +575,10 @@ module speed_timeloop
                          
                           !DAMPING
                           make_damping_yes_or_not, Y_lambda,Y_mu, N_SLS, damping_type, frequency_range, &
-                          A0_ray, A1_ray,fmax, &
+                          A0_ray, A1_ray,fmax, fref, &
+                          Trelax, exp_Trelax, visc_Mu, visc_Mp, visc_wgt_s, visc_wgt_p, &
+                          zeta_node_t0, zeta_node_t1, &             ! For Damping Type 4
+                          
                         
                          !CASE
                          n_case,tag_case,val_case, & 
@@ -698,7 +717,62 @@ contains
 
 end module binarysearch
 
+module mpii_material_def
+      type mpii_material
+            integer*4 :: mesh_block_id      !< NL-P Material ID
+            integer*4 :: nspring
 
+            ! Input material properties
+            real*8 :: rho, VS, VP
+            
+            ! Elastic Modulii 
+            ! E = Young's Modulus, Ni = poisson's rattio; k = bulk modulus; lambda = lame's first parameter; 
+            ! mu = S-wave modulus (shear modulus); mp = p_wave modulus (lambda + 2*mu)
+            real*8 :: E_elastic, Ni_elastic, lambda_elastic, mu_elastic, mp_elastic, K_elastic
+
+            ! Damping - Unrelaxed mu and mp
+            real*8 :: Mu_unrelax, Mp_unrelax         ! Unrelaxed shear wave and p-wave Modulii corresponsding to visco-elastic behaviour (damping 4)
+            
+            ! Parameters calculation of Non-linear constitutive model (Iwan Springs)
+            ! Depend on options like pressure dependedncy, effective stess/ total stress formulation
+            real*8 :: Gmax, Emax, Kmax, lambdamax 
+            real*8 :: G_corr                         ! Corrected Shear Modulus = mu_visco for pressure-independent; = modified for pressure dependency
+
+            ! G/Gmax curve data
+            real*8 :: ref_strain                                 ! for Hyperbolic G/Gmax curve using equation
+            real*8, dimension(:), allocatable :: spr_strain      ! Strain Values Corresponding to yield of each spring
+            real*8, dimension(:), allocatable :: spr_GbyGmax     
+            real*8, dimension(:), allocatable :: spr_yldstress
+            real*8, dimension(:), allocatable :: spr_CNinv
+      end type mpii_material
+end module mpii_material_def
+
+module nlp_element_def
+      type nlp_element
+                  integer*4, dimension(:,:,:),  allocatable :: activefsur     ! Activated Iwan spring
+                  real*8, dimension(:,:,:,:),   allocatable :: F2             ! Von Mises Stress
+                  real*8, dimension(:,:,:,:,:), allocatable :: Sa1            ! Origin(back stress) for Hardening rule
+      end type nlp_element
+end module nlp_element_def
+
+module NLP_MPII
+
+      use mpii_material_def
+      use nlp_element_def
+      use speed_par, only:  &
+                              !From *.mate file
+                              nmat_nlp, tag_mat_nlp, functag_mat_nlp, nlp_pressdep_flag, nlp_effstress_flag,&
+                              damping_type, make_damping_yes_or_not, N_SLS, Trelax, visc_wgt_s, visc_wgt_p, &
+                              visc_Mu, visc_Mp
+
+      !real*8 :: strain_min = 1.0d-6
+      !real*8 :: strain_max = 1.0d-1
+      integer*4 :: max_nspr
+
+      type(mpii_material), dimension(:), allocatable:: mpii_mat
+      type(nlp_element),   dimension(:), allocatable:: nlp_elem
+
+end module NLP_MPII
 
 
 

@@ -41,9 +41,9 @@
         real*8, intent(out), dimension(nmat,nsls) :: viselastic_wgt_s, viselastic_wgt_p
 
         integer*4 :: imat, isls
-        real*8 :: pi, chi_s, chi_p
+        real*8 :: pi, chi_s, chi_p, dum_real
         real*8, dimension(nsls)      :: viselastic_alpha, viselastic_beta
-        complex*8 :: A1_s, A1_p, dum_cmplx
+        complex*16 :: sum_A1s, sum_A1p
 
         pi = 4.d0*datan(1.d0);
 
@@ -70,18 +70,16 @@
 
         ! Visco Elastic Modulus Calculation (Equation 1: Mu = A1*Mu_viselastic)
         do imat = 1,nmat
-            A1_s =  dcmplx(1.d0,0.d0);
-            A1_p =  dcmplx(1.d0,0.d0);
-
+            sum_A1s = dcmplx(0.d0,0.d0);
+            sum_A1p = dcmplx(0.d0,0.d0);
             do isls = 1,nsls
-                dum_cmplx = 1.d0 +  DCMPLX(0.d0,1.d0)* (2.d0*pi*f_ref)* viselastic_Trelax(isls)
-                A1_s = A1_s - (viselastic_wgt_s(imat, isls)/ dum_cmplx)
-                A1_p = A1_p - (viselastic_wgt_p(imat, isls)/ dum_cmplx)
+                dum_real = (2.d0*pi*f_ref)* viselastic_Trelax(isls)
+                sum_A1s = sum_A1s + (viselastic_wgt_s(imat, isls)/ dcmplx(1.d0,dum_real))
+                sum_A1p = sum_A1p + (viselastic_wgt_p(imat, isls)/ dcmplx(1.d0,dum_real))
             enddo
-
-            viselastic_Ms(imat) = prop_mat(imat,3) /cabs(A1_s)
-            viselastic_Mp(imat) = (prop_mat(imat,2) + 2*prop_mat(imat,3)) /cabs(A1_p)
+            viselastic_Ms(imat) = prop_mat(imat,3) /cdabs(1.d0 - sum_A1s)
+            viselastic_Mp(imat) = (prop_mat(imat,2) + 2.d0*prop_mat(imat,3)) /cdabs(1.d0 - sum_A1p)
         enddo
-
+        
 
     end subroutine MAKE_VISCOELASTIC_LIU_ARCHULETA

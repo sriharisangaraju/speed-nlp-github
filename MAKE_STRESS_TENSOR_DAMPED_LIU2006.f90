@@ -62,7 +62,7 @@
       
       integer*4, intent(in) :: nn, nsls, ie, nnod_loc, nn_cs_loc
       integer*4, intent(in), dimension(nnod_loc) :: node_counter
-      integer*4, intent(in), dimension(nn_cs_loc) :: cs_loc
+      integer*4, intent(in), dimension(0:nn_cs_loc) :: cs_loc
       
       real*8, intent(in), dimension(nsls)     :: exp_Trelax, wt_s, wt_p
       real*8, intent(in), dimension(nn,nn,nn) :: Mp, Ms
@@ -74,17 +74,21 @@
 
       integer*4 :: p, q, r, isls, is, in, iaz
 
-      real*8 :: lambda_comp_relaxfcn, lambda_comp_stress, dum_relaxfcn
+      real*8 :: lambda_comp_relaxfcn, lambda_comp_stress, dum_relaxfcn, dum1, dum2, dum3, dum4, dum5
       real*8 :: sum_relaxfcn_xx, sum_relaxfcn_yy, sum_relaxfcn_zz
       real*8 :: sum_relaxfcn_xy, sum_relaxfcn_yz, sum_relaxfcn_xz
       real*8, dimension(nn,nn,nn) :: strain_xx,strain_xy,strain_xz
       real*8, dimension(nn,nn,nn) :: strain_yy,strain_yz,strain_zz, strain_vol
+      real*8, dimension(nsls) :: xz_relaxfcn
 
       
       ! Total Strain - Elastic (at all GLL nodes in 1 element)
-      strain_xx = duxdx;      strain_xy = (duxdy + duydx)/2.d0
-      strain_yy = duydy;      strain_yz = (duydz + duzdy)/2.d0
-      strain_zz = duzdz;      strain_xz = (duzdx + duxdz)/2.d0
+      strain_xx = 0.d0!duxdx;      !strain_xy = 0.d0!(duxdy + duydx)/2.d0
+      strain_yy = 0.d0!duydy;      !strain_yz = 0.d0!(duydz + duzdy)/2.d0
+      strain_zz = 0.d0!duzdz;      !strain_xz = (duzdx + duxdz)/2.d0
+      strain_xy = 0.d0!(duxdy + duydx)/2.d0
+      strain_yz = 0.d0!(duydz + duzdy)/2.d0
+      strain_xz = (duzdx + duxdz)/2.d0
 
       strain_vol = (strain_xx + strain_yy + strain_zz)
 
@@ -146,6 +150,8 @@
                         dum_relaxfcn = exp_Trelax(isls)*zeta_node_t0(iaz,isls) + wt_s(isls)*(1.d0-exp_Trelax(isls))* strain_xz(p,q,r)
                         zeta_node_t1(iaz,isls) = zeta_node_t1(iaz,isls) + (dum_relaxfcn/node_counter(in))
                         sum_relaxfcn_xz = sum_relaxfcn_xz + dum_relaxfcn
+
+                        !xz_relaxfcn(isls) = dum_relaxfcn
                     enddo
                     
                     ! Calculating Total Stressess after Damping (or Relaxation)
@@ -156,6 +162,20 @@
                     stress_xy(p,q,r) = 2*Ms(p,q,r)* (strain_xy(p,q,r) - sum_relaxfcn_xy)
                     stress_yz(p,q,r) = 2*Ms(p,q,r)* (strain_yz(p,q,r) - sum_relaxfcn_yz)
                     stress_zx(p,q,r) = 2*Ms(p,q,r)* (strain_xz(p,q,r) - sum_relaxfcn_xz)
+
+                    if ( (ie.eq.1) .and. ((p+q+r).eq.3) ) then
+                        !dum5 = lambda_comp_stress + 2*Ms(p,q,r)*strain_xx(p,q,r);
+                        !dum1 = max( abs(100.d0*sum_relaxfcn_xx/dum5), 0.00000001);
+
+                        !dum5 = lambda_comp_stress + 2*Ms(p,q,r)*strain_zz(p,q,r);
+                        !dum2 = max( abs(100.d0*sum_relaxfcn_zz/dum5), 0.00000001);
+
+                        !dum3 = max( abs(100.d0*sum_relaxfcn_xy/strain_xy(p,q,r)), 0.00000001);
+                        !dum4 = max( abs(100.d0*sum_relaxfcn_xz/strain_xz(p,q,r)), 0.00000001);
+                        !write(*,*) '% strain Relaxation xz = ', strain_xz(p,q,r), sum_relaxfcn_xz, dum4
+                        !write(*,*) '% strain Relaxation xx = ', dum1, 'zz = ', dum2, 'xy = ', dum3, 'xz = ', dum4
+                        !write(*,*) 'Strain xx = ', strain_xx(p,q,r), 'Strain zz = ', strain_zz(p,q,r), 'xy = ', strain_xy(p,q,r), 'zx = ', strain_xz(p,q,r)
+                    endif
                 enddo
             enddo
         enddo
@@ -172,7 +192,7 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
-     subroutine MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, Mu, Mp, &
+     subroutine MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, Mu, Kbulk, &
                                         sxx, syy, szz, syz, szx, sxy, &
                                         strain_xx, strain_yy, strain_zz, &
                                         strain_yz, strain_xz, strain_xy)
@@ -181,15 +201,16 @@
 
       integer*4, intent(in) :: nn
       
-      real*8, intent(in), dimension(nn,nn,nn) :: Mu, Mp
+      real*8, intent(in), dimension(nn,nn,nn) :: Mu, Kbulk
       real*8, intent(in), dimension(nn,nn,nn) :: sxx, syy, szz, syz, szx, sxy
       real*8, intent(out),   dimension(nn,nn,nn) :: strain_xx, strain_yy, strain_zz
       real*8, intent(out),   dimension(nn,nn,nn) :: strain_yz, strain_xz, strain_xy
 
-      real*8, dimension(nn,nn,nn) :: strain_vol, stress_vol, Kbulk
+      real*8, dimension(nn,nn,nn) :: strain_vol, stress_vol
 
         ! Bulk Modulus
-        Kbulk = Mp - 4.d0*Mu/3.d0
+        !Kbulk = Mp - 4.d0*Mu/3.d0
+        !Kbulk = lambda + 2.d0*Mu/3.d0
         
         ! Strain = Volumetric Strain + Deviatoric Strain
         ! Stress = Volumetric Stress + Deiatoric Stress

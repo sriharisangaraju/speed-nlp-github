@@ -47,7 +47,7 @@
                    ic, ih, ik, il, it, ipos, ineg, &
                    isnap, its, fn, nn, ip, im, imon, iaz, &
                    i, j, k, is, in, id, istage, itime, &
-                   ie, ielem, count_monitor, find_tag, icase, irand
+                   ie, ielem, count_monitor, find_tag, icase, irand, interest_node(1)
                    
       ! Elapsed time print-out iteration divisor
       integer*4 :: it_divisor = 1000
@@ -121,7 +121,8 @@
 
 ! NON LINEAR - PLASTIC MATERIAL
       integer*4                                :: im_nlp, nsurf_vel !max_nspr
-
+      real*8, dimension(nnod_loc)              :: dist_temp
+      real*8, dimension(0:nts,N_SLS)           :: zeta_debug
       real*8, dimension(:), allocatable        :: oldstrain, oldstress         ! also stress and strain,
       real*8, dimension(:,:,:), allocatable    :: strain_el_xx, strain_el_yy, strain_el_zz, &
                                                   strain_el_xy, strain_el_yz, strain_el_xz
@@ -854,6 +855,12 @@
          
       endif
 
+! Debug - finding the node that is close to interested region
+      do id = 1, nnod_loc
+         dist_temp(id) = dsqrt((xx_spx_loc(id) - 0)**2 + (yy_spx_loc(id) - 0)**2 + (zz_spx_loc(id) + 14100)**2 )
+      enddo
+      interest_node = int(minloc(dist_temp));
+      zeta_debug = 0.d0;
 
 !---------------------------------------------------------------------------
 !     BEGINNING OF THE TIME LOOP
@@ -873,17 +880,18 @@
             oldstrain = strain;
             oldstress = stress;
          endif
-
-         if ((opt_out_var(4) .eq. 1) .or. (nmat_nlp.eq.0)) stress = 0.d0
-
+         
+         if ((opt_out_var(4) .eq. 1) .or. (nmat_nlp.gt.0)) stress = 0.d0
+         
          if ((opt_out_var(5) .eq. 1) .or. (damping_type .eq. 2) .or. (nmat_nlp.gt.0)) then
             strain = 0.d0
          endif
-
+         
          if (damping_type .eq. 4) then
             zeta_node_t0 = zeta_node_t1;  zeta_node_t1 = 0.d0;
             do i=1,N_SLS
-               exp_Trelax = dexp(-deltat/Trelax(i))
+               exp_Trelax(i) = dexp(-deltat/Trelax(i))
+               zeta_debug(its,i) = zeta_node_t0(6*(interest_node(1) -1) + 6, i);
             enddo
          endif
 
@@ -901,7 +909,7 @@
          endif
 
          u_int = 0.d0; v_int = 0.d0;
-      
+         
 !---------------------------------------------------------------------------
 !     LOOP FOR RK SCHEMES
 !---------------------------------------------------------------------------
@@ -1070,7 +1078,7 @@
 !---------------------------------------------------------------------------
 
          
-
+            
          if (nelem_loc.gt.0) then
 
  !     write(*,*) 'nmat_nle', nmat_nle
@@ -1352,7 +1360,7 @@
                        
                        endif
                            
-                                   
+                        if (nmat_nlp.eq.0) then           
                         do k = 1,nn
                            do j = 1,nn
                               do i = 1,nn
@@ -1383,6 +1391,8 @@
                              enddo
                           enddo
                         enddo 
+                        endif
+                        
                         call MAKE_STRESS_TENSOR_DAMPED(nn,lambda_el,mu_el,&                                        
                                     duxdx_el,duydx_el,duzdx_el,&                                
                                     duxdy_el,duydy_el,duzdy_el,&                                
@@ -1406,86 +1416,9 @@
                                                duxdy_el, duydy_el, duzdy_el,&                        
                                                duxdz_el, duydz_el, duzdz_el,&
                                                zeta_node_t0, zeta_node_t1, &
-                                               sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el) ! Damped Stress Tensors   
+                                               sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el) ! Damped Stress Tensors
 
-                        ! Caculating viscous Strain tensor from stress tensor
-                        if ((nmat_nlp.gt.0) .or. (opt_out_var(5).eq.1)) then
-                           allocate(strain_el_xx(nn,nn,nn), strain_el_yy(nn,nn,nn), strain_el_zz(nn,nn,nn), &
-                                    strain_el_yz(nn,nn,nn), strain_el_xz(nn,nn,nn), strain_el_xy(nn,nn,nn))
-                           
-                           call MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, mu_el, lambda_el, &
-                                                nn, ie, sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el, &
-                                                strain_el_xx, strain_el_yy, strain_el_zz, &
-                                                strain_el_yz, strain_el_xz, strain_el_xy)
-
-                           ! Writing Strain at Nodes, to print output/ also for Non-linear implementation
-                           do k = 1,nn
-                                 do j = 1,nn
-                                    do i = 1,nn
-                                       is = nn*nn*(k -1) + nn*(j -1) + i
-                                       in = con_spx_loc(con_spx_loc(ie -1) + is);    iaz = 6*(in - 1 )
-                                       strain(iaz+1) = strain(iaz+1) + strain_el_xx(i,j,k) /node_counter(in)
-                                       strain(iaz+2) = strain(iaz+2) + strain_el_yy(i,j,k) /node_counter(in)
-                                       strain(iaz+3) = strain(iaz+3) + strain_el_zz(i,j,k) /node_counter(in)
-                                       strain(iaz+4) = strain(iaz+4) + strain_el_xy(i,j,k) /node_counter(in)
-                                       strain(iaz+5) = strain(iaz+5) + strain_el_yz(i,j,k) /node_counter(in)
-                                       strain(iaz+6) = strain(iaz+6) + strain_el_xz(i,j,k) /node_counter(in)
-                                    enddo
-                                 enddo
-                           enddo
-
-                           if (opt_out_var(5).eq.1) then 
-                              deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy)
-                           endif
-                        endif
-                        if (nmat_nlp .gt. 0) then
-                           ! allocate(dstrainxx_el(nn,nn,nn), dstrainyy_el(nn,nn,nn), dstrainzz_el(nn,nn,nn), &
-                           !       dstrainxy_el(nn,nn,nn), dstrainyz_el(nn,nn,nn), dstrainzx_el(nn,nn,nn))
-                           ! allocate(dplastxx_el(nn,nn,nn), dplastyy_el(nn,nn,nn), dplastzz_el(nn,nn,nn), &
-                           !       dplastxy_el(nn,nn,nn), dplastyz_el(nn,nn,nn), dplastzx_el(nn,nn,nn))
-                           ! allocate(S1xx_el(nn,nn,nn), S1yy_el(nn,nn,nn), S1zz_el(nn,nn,nn), &
-                           !       S1xy_el(nn,nn,nn), S1yz_el(nn,nn,nn), S1zx_el(nn,nn,nn))
-                           ! allocate(Sa1xx_el(nn,nn,nn,mpii_mat%nspring), Sa1yy_el(nn,nn,nn,mpii_mat%nspring), Sa1zz_el(nn,nn,nn,mpii_mat%nspring), &
-                           !       Sa1xy_el(nn,nn,nn,mpii_mat%nspring), Sa1yz_el(nn,nn,nn,mpii_mat%nspring), Sa1zx_el(nn,nn,nn,mpii_mat%nspring))
-                           ! allocate(F2_el(nn,nn,nn,mpii_mat%nspring))
-                           ! allocate(activefsur_el(nn,nn,nn))
-
-                           ! call ARRAINGE_ELTENSORS_FOR_NLP(nnod_loc, con_nnz_loc, nn, con_spx_loc, nmax_spr, mpii_mat%nspring, ie, &
-                           !                         oldstrain, oldstress, S1, Sa1, F2, activefsur, &
-                           !                         dstrainxx_el, dstrainyy_el, dstrainzz_el, &     ! Strain in previous Time step, later it is used to caculate strain increment
-                           !                         dstrainxy_el, dstrainyz_el, dstrainzx_el, &
-                           !                         sxx_el, syy_el, szz_el, &                       ! Stress In previous time step
-                           !                         sxy_el, syz_el, szx_el, &  
-                           !                         S1xx_el, S1yy_el, S1zz_el, &                    !
-                           !                         S1xy_el, S1yz_el, S1zx_el, &
-                           !                         Sa1xx_el, Sa1yy_el, Sa1zz_el, &
-                           !                         Sa1xy_el, Sa1yz_el, Sa1zx_el, &
-                           !                         F2_el, activefsur_el)
-
-                           ! dstrainxx_el = strainxx_el - dstrainxx_el;      dstrainxy_el = strainxy_el - dstrainxy_el;
-                           ! dstrainyy_el = strainyy_el - dstrainyy_el;      dstrainyz_el = strainyz_el - dstrainyz_el;
-                           ! dstrainzz_el = strainzz_el - dstrainzz_el;      dstrainzx_el = strainzx_el - dstrainzx_el;
-
-                           sxx_el = 0.d0;    syy_el = 0.d0;    szz_el = 0.d0;
-                           sxy_el = 0.d0;    syz_el = 0.d0;    szx_el = 0.d0;
-                           do im_nlp = 1, nmat_nlp
-                              if (tag_mat_nlp(im_nlp) .eq. tag_mat(im)) then
-                                 call MAKE_STRESS_TENSOR_IWAN( its, nnod_loc, con_nnz_loc, con_spx_loc, &
-                                                      ie, nn, mpii_mat(im_nlp), mpii_mat(im_nlp)%nspring, &
-                                                      nlp_pressdep_flag, oldstrain, oldstress, &
-                                                      strain_el_xx, strain_el_yy, strain_el_zz, &        ! IN: Strain - current time step
-                                                      strain_el_xy, strain_el_yz, strain_el_xz, & 
-                                                      nlp_elem(ie)%Sa1, nlp_elem(ie)%F2, nlp_elem(ie)%activefsur, &   ! IN-OUT: Origin Stess for hardening rule; Vonmises stress corresponding to each iwan spring yield level; currently active Iwan spring yield surface
-                                                      sxx_el, syy_el, szz_el, &                          ! OUT: Total Stress Tensor
-                                                      sxy_el, syz_el, szx_el)
-                                                      !dplastxx_el, dplastyy_el, dplastzz_el, &           ! OUT: Plastic Strain Increment (only used for pressure dependednt model)
-                                                      !dplastxy_el, dplastyz_el, dplastzx_el, &
-                                                      !S1xx_el, S1yy_el, S1zz_el, &                       ! IN-OUT: Deviatoric Stress Tensor for Vonmises stress calculation
-                                                      !S1xy_el, S1yz_el, S1zx_el, &
-                              endif
-                           enddo
-                           deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy)
-                        endif
+                        
                     else 
                         call MAKE_STRESS_TENSOR(nn,lambda_el,mu_el,&                                        
                                    duxdx_el,duydx_el,duzdx_el,&                                
@@ -1494,7 +1427,66 @@
                                    sxx_el,syy_el,szz_el,&                                
                                    syz_el,szx_el,sxy_el)                                
                     endif
-                 
+
+                  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                  ! Nonlinear - plastic Iwan (from Fabian)
+                  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                     if ((nmat_nlp.gt.0) .or. ((damping_type.eq.4) .and. (opt_out_var(5).eq.1)) )then     ! Only with Damping 2 and 4
+                        allocate(strain_el_xx(nn,nn,nn), strain_el_yy(nn,nn,nn), strain_el_zz(nn,nn,nn), &
+                                 strain_el_yz(nn,nn,nn), strain_el_xz(nn,nn,nn), strain_el_xy(nn,nn,nn), Kbulk(nn,nn,nn))
+
+                        if (damping_type.eq.2) Kbulk = lambda_el + 2.d0*mu_el/3.d0;
+                        if (damping_type.eq.4) Kbulk = lambda_el - 4.d0*mu_el/3.d0;    !here lambda is P-wave modulus
+                        
+                        call MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, mu_el, Kbulk, &
+                                             nn, ie, sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el, &
+                                             strain_el_xx, strain_el_yy, strain_el_zz, &
+                                             strain_el_yz, strain_el_xz, strain_el_xy)
+
+                        ! Writing Strain at Nodes, to print output/ also for Non-linear implementation
+                        do k = 1,nn
+                              do j = 1,nn
+                                 do i = 1,nn
+                                    is = nn*nn*(k -1) + nn*(j -1) + i
+                                    in = con_spx_loc(con_spx_loc(ie -1) + is);    iaz = 6*(in - 1 )
+                                    strain(iaz+1) = strain(iaz+1) + strain_el_xx(i,j,k) /node_counter(in)
+                                    strain(iaz+2) = strain(iaz+2) + strain_el_yy(i,j,k) /node_counter(in)
+                                    strain(iaz+3) = strain(iaz+3) + strain_el_zz(i,j,k) /node_counter(in)
+                                    strain(iaz+4) = strain(iaz+4) + strain_el_xy(i,j,k) /node_counter(in)
+                                    strain(iaz+5) = strain(iaz+5) + strain_el_yz(i,j,k) /node_counter(in)
+                                    strain(iaz+6) = strain(iaz+6) + strain_el_xz(i,j,k) /node_counter(in)
+                                 enddo
+                              enddo
+                        enddo
+
+                        if (nmat_nlp.eq.0) then 
+                           deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy)
+                        endif
+                     endif
+
+                     if (nmat_nlp .gt. 0) then
+                        sxx_el = 0.d0;    syy_el = 0.d0;    szz_el = 0.d0;
+                        sxy_el = 0.d0;    syz_el = 0.d0;    szx_el = 0.d0;
+                        do im_nlp = 1, nmat_nlp
+                           if (tag_mat_nlp(im_nlp) .eq. tag_mat(im)) then
+                              call MAKE_STRESS_TENSOR_IWAN( its, nnod_loc, con_nnz_loc, con_spx_loc, &
+                                                   ie, nn, mpii_mat(im_nlp), mpii_mat(im_nlp)%nspring, &
+                                                   nlp_pressdep_flag, oldstrain, oldstress, &
+                                                   strain_el_xx, strain_el_yy, strain_el_zz, &        ! IN: Strain - current time step
+                                                   strain_el_xy, strain_el_yz, strain_el_xz, & 
+                                                   nlp_elem(ie)%Sa1, nlp_elem(ie)%F2, nlp_elem(ie)%activefsur, &   ! IN-OUT: Origin Stess for hardening rule; Vonmises stress corresponding to each iwan spring yield level; currently active Iwan spring yield surface
+                                                   sxx_el, syy_el, szz_el, &                          ! OUT: Total Stress Tensor
+                                                   sxy_el, syz_el, szx_el)
+                                                   !dplastxx_el, dplastyy_el, dplastzz_el, &           ! OUT: Plastic Strain Increment (only used for pressure dependednt model)
+                                                   !dplastxy_el, dplastyz_el, dplastzx_el, &
+                                                   !S1xx_el, S1yy_el, S1zz_el, &                       ! IN-OUT: Deviatoric Stress Tensor for Vonmises stress calculation
+                                                   !S1xy_el, S1yz_el, S1zx_el, &
+                           endif
+                        enddo
+                        deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy)
+                     endif
+
+                 !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                                   
                  
                     if (nload_sism_el.gt.0) then                                                
@@ -1746,7 +1738,16 @@
 !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-                     
+!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+! Damping = 4 begin
+!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+              if (damping_type.eq.4) then
+                  mu_el = visc_Mu(im)
+                  lambda_el = visc_Mp(im) - 2*visc_Mu(im)
+              endif
+!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+! Damping = 4 end
+!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                 call MAKE_ABC_FORCE(nn,ct,ww,dd,&
                                    rho_el,lambda_el,mu_el,&                         
                                   alfa11(ie_curr),alfa12(ie_curr),alfa13(ie_curr),&
@@ -2499,7 +2500,13 @@
     endif
 
 
-
+! Debug Damping 4                               
+   !  open(2501,file='zeta_debug_z14100.txt')
+   !  write(2501,*) 'interest_node = ', interest_node(1), xx_spx_loc(interest_node(1)), yy_spx_loc(interest_node(1)), zz_spx_loc(interest_node(1))
+   !  do id = 0,nts
+   !    write(2501,*) (zeta_debug(id,i), i=1,N_SLS)
+   !  enddo
+   !  close(2501)
          
 !---------------------------------------------------------------------------
 !     COMPUTE ERROR

@@ -67,7 +67,6 @@
                     mpii_mat(im_nlp)%K_elastic   = mpii_mat(im_nlp)%E_elastic/(3.d0*(1.d0 - 2.d0*mpii_mat(im_nlp)%Ni_elastic)) 
 
                     if (damping_type .eq. 4) then
-                        
                         mpii_mat(im_nlp)%Mu_unrelax = visc_Mu(im)
                         mpii_mat(im_nlp)%Mp_unrelax = visc_Mp(im)
                         !mpii_mat(im_nlp)%lambda_viscoel = visc_Mp(im) - 2*visc_Mu(im)
@@ -84,7 +83,26 @@
                             !mpii_mat(im_nlp)%G_corr = mpii_mat(im_nlp)%Mu_unrelax*abs(effective_mean_stress/effective_mean_stress_at_middle_of_soil_layer)
                             CALL EXIT()
                         endif
+                        if (nlp_effstress_flag) then
+                            call EXIT()
+                        endif
 
+                    elseif (damping_type.eq.2) then
+                        mpii_mat(im_nlp)%Mu_unrelax = mpii_mat(im_nlp)%mu_elastic
+                        mpii_mat(im_nlp)%Mp_unrelax = mpii_mat(im_nlp)%mp_elastic
+
+                        ! For MPII, Only this is Implemented now : Viscoelastic Damping + Pressure Independednt + Total Stress Formulation
+                        mpii_mat(im_nlp)%Gmax   = mpii_mat(im_nlp)%mu_elastic
+                        mpii_mat(im_nlp)%Emax   = mpii_mat(im_nlp)%E_elastic
+                        mpii_mat(im_nlp)%Kmax   = mpii_mat(im_nlp)%K_elastic
+                        mpii_mat(im_nlp)%lambdamax = mpii_mat(im_nlp)%lambda_elastic
+                        mpii_mat(im_nlp)%G_corr = mpii_mat(im_nlp)%mu_elastic                                           ! This changes for Effective stress formulation
+
+                        if (nlp_pressdep_flag) then
+                            ! Need to be updated in every time step
+                            !mpii_mat(im_nlp)%G_corr = mpii_mat(im_nlp)%Mu_unrelax*abs(effective_mean_stress/effective_mean_stress_at_middle_of_soil_layer)
+                            CALL EXIT()
+                        endif
                         if (nlp_effstress_flag) then
                             call EXIT()
                         endif

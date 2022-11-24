@@ -199,12 +199,18 @@
          call MAKE_VISCOELASTIC_LIU_ARCHULETA(nmat, N_SLS, prop_mat, QS, QP, fref, &
                                              Trelax, visc_wgt_s, visc_wgt_p, &
                                              visc_Mu, visc_Mp)
-
-         if (nmat_nlp .gt. 0) then
-            call MAKE_NLP_IWANSPRING_YIELDVALUES()
-         endif
+         call MPI_BARRIER(mpi_comm, mpi_ierr)
      endif   
-      
+
+!*****************************************************************************************
+!   Initialising non-linear plastic model (Iwan model from Fabian)          
+!*****************************************************************************************
+     if (nmat_nlp .gt. 0) then
+            if ((damping_type.ne.2) .and. (damping_type.ne.4)) call EXIT()    ! Only Dampingtypes 2 and 4 are allowed
+            if ((nmat_nhe .gt. 0) .or. (n_case .gt. 0)) call EXIT()           ! Not-honoring not-yet implemented
+            call MAKE_NLP_IWANSPRING_YIELDVALUES()
+            call MPI_BARRIER(mpi_comm, mpi_ierr)
+     endif
 
 !*****************************************************************************************
 !   Not Honoring Enhanced (Reading Material properties from Tomo File)          

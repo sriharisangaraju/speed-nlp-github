@@ -257,8 +257,6 @@
       
       allocate(QS(nmat), QP(nmat)); QS = 0.d0; QP = 0.d0;
 
-      ! For nonLinear Plasticity only Damping_type of 4 should be used
-      if (nmat_nlp.gt.0) damping_type = 4;
             
       call READ_FILEMATE(mat_file,nmat,prop_mat,type_mat,tref_mat,tag_mat, QS, QP,&
                 nmat_nle,prop_mat_nle,val_mat_nle,type_mat_nle,tag_mat_nle, &   

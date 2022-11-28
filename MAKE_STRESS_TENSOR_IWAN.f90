@@ -55,7 +55,7 @@
 
         logical, intent(in) :: nlp_pressdep_flag
 
-        real*8, dimension(nnloc), intent(in)    :: oldstrain, oldstress
+        real*8, dimension(6*nnloc), intent(in)    :: oldstrain, oldstress
         real*8, dimension(nn,nn,nn), intent(in) ::  strainxx_el, strainyy_el, strainzz_el, &
                                                     strainxy_el, strainyz_el, strainzx_el
         
@@ -74,7 +74,7 @@
         !                                          SSa1xy_el, SSa1yz_el, SSa1zx_el, FF2_el
 
         ! Variables Used only in this subroutine
-        integer*4 :: i, j, k, is, in, iaz
+        integer*4 :: i, j, k, is, in, iaz, k11
 
         real*8 :: node_epsm, node_dsigm
         real*8, dimension(6)      :: node_dstress, node_deps, node_S1 !eps = Total Strain; 
@@ -115,15 +115,23 @@
 
                     ! Von Mises Stress
                     node_F2(1:nspr) = F2(i,j,k,1:nspr);
+                    
+                    ! if ( (ie.eq.5276) .and. (i.eq.3) .and. (j.eq.1) .and. (k.eq.3) )  then
+                    !     write(*,*) 'input dstrain ', (node_deps(k11), k11=1,6)
+                    ! endif
 
                     call NEOIWAN(its, nspr, mpii_lay%lambdamax, mpii_lay%Gmax, mpii_lay%G_corr, mpii_lay%Kmax,&
                                 node_deps, node_epsm, node_S1, node_Sa1, node_F2, &
-                                mpii_lay%spr_yldstress, mpii_lay%spr_CNinv, active_fsur(i,j,k), node_dstress)
+                                mpii_lay%spr_yldstress, mpii_lay%spr_CNinv, active_fsur(i,j,k), node_dstress, ie, i,j,k)
 
                     !Arrainging Total Stresses (Stress_new = Stress_old + stressIncrement)
                     sxx_el(i,j,k) = oldstress(iaz+1) + node_dstress(1);  sxy_el(i,j,k) = oldstress(iaz+4) + node_dstress(4);
                     syy_el(i,j,k) = oldstress(iaz+2) + node_dstress(2);  syz_el(i,j,k) = oldstress(iaz+5) + node_dstress(5);
                     szz_el(i,j,k) = oldstress(iaz+3) + node_dstress(3);  szx_el(i,j,k) = oldstress(iaz+6) + node_dstress(6);
+
+                    ! if ( (ie.eq.5276) .and. (i.eq.3) .and. (j.eq.1) .and. (k.eq.3) )  then
+                    !     write(*,*) 'output dstress = ', (node_dstress(k11), k11=1,6)
+                    ! endif
 
                     ! Plastic strain increment array (gamma for shear not epsilon)
                     ! if (nlp_pressdep_flag) then
@@ -151,7 +159,7 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine NEOIWAN(its, nspr, lambdamax, Gmax, Gini, Kmax, deps,depsm, &
-                        SS1, SSa1, FF2, R, CNinv, aktifsur, dSigma)
+                        SS1, SSa1, FF2, R, CNinv, aktifsur, dSigma, ie1, i1, j1, k1)
 
         implicit none
 
@@ -168,7 +176,7 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         real*8, dimension(nspr,6), intent(inout):: SSa1
 
         ! Other Variables used only inside the subroutine
-        integer*4   :: i, j, m
+        integer*4   :: i, j, m, ie1, i1, j1, k1, k11
         integer*4   :: start1, aktif, D, errorflag
         integer*4, dimension(6) :: INDX
 
@@ -178,7 +186,7 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         real*8, dimension(6,6) :: Ed    !, Esd
 
 
-
+        !write(*,*) 'Element No, Node No: ',ie1, i1, j1 ,k1
         ! TotalStress = deviotoricStress + meanStress
         ! Mean Stress and Strain calculation
         !depsm   = (deps(1) + deps(2)+deps(3))/ 3.d0    
@@ -202,19 +210,32 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
             SSa1 = 0.0
             !dplast  = 0.0
             aktifsur  = 0
+            ! if ( (ie1.eq.5276) .and. (i1.eq.3) .and. (j1.eq.1) .and. (k1.eq.3) )  write(*,*) 'aktif = ', aktif
             return
         endif
 
         ! Deviatoric Strain
         de = 0.d0
-        de(1:3) = deps(1:3) - depsm
-        de(4:6) = deps(4:6)
+        de(1) = de(1) - depsm
+        de(2) = de(2) - depsm
+        de(3) = de(3) - depsm
+        de(4) = deps(4)/2.d0
+        de(5) = deps(5)/2.d0
+        de(6) = deps(6)/2.d0
+        !de(1:3) = deps(1:3) - depsm
+        !de(4:6) = deps(4:6)
+        
 
         ! If First spring is not yielded - Find VonMises Yield stress Condition (FF2(1)),
         ! Corresponding to Total Deviatoric Stress (SS1)??, and origin/back stress of kinematic hardening rule (SSa1)?? 
         if (aktifsur .eq. 0) then
             call IWAN_surface (SS1, SSa1(1,:), FF2(1))
             call IWAN_dsurface(SS1, SSa1(1,:), de, dF(1))
+            ! if ( (ie1.eq.5276) .and. (i1.eq.3) .and. (j1.eq.1) .and. (k1.eq.3) )  then
+            !     write(*,*) 'SS1 = ', (SS1(k11), k11=1,6)
+            !     write(*,*) 'SS1 = ', (SSa1(1,k11), k11=1,6)
+            !     write(*,*) 'FF2(1) = ', FF2(1), 'dF(1) = ', dF(1)
+            ! endif
         endif
 
         aktif = 0
@@ -231,7 +252,7 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         endif
         
         ! Condition where, first IWAN spring has not yet Yielded
-        if ( FF2(1) .lt. R(1)**2  .AND. dF(1) .ge. 0.0)   then
+        if ( FF2(1) .lt. R(1)**2.d0  .AND. dF(1) .ge. 0.d0)   then
             call IWAN_elastic(Gini, Gmax, lambdamax, deps, dSigma) 
           
             dS    = dSigma
@@ -248,7 +269,7 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         ! Coefficient Matrix (Ed) computation 
         ! Ed * dS (deviatoric stress increment) = de (deviatoric strain increment)
         ! dS is unknown here
-        Ed    = 0.0
+        Ed    = 0.d0
         do i = 1,6
             Ed(i,i) = 0.5/Gmax
         enddo
@@ -260,7 +281,7 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
             call IWAN_surface (SS1, SSa1(j,:), FF2(j) )
             call IWAN_dsurface(SS1, SSa1(j,:), de, dF(j) )
 
-            if ( (dF(j) .GE. 0.0)  .AND. (FF2(j) .GE. R(j)**2) ) then 
+            if ( (dF(j) .GE. 0.d0)  .AND. (FF2(j) .GE. R(j)**2.d0) ) then 
                 aktif = aktif+ 1
                 start1 = aktif
 
@@ -306,9 +327,12 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         dsigma(1) = 2.d0*Ginitial*deps(1)+ lambda*depsvol
         dsigma(2) = 2.d0*Ginitial*deps(2)+ lambda*depsvol
         dsigma(3) = 2.d0*Ginitial*deps(3)+ lambda*depsvol
-        dsigma(4) = 2.d0*Gmax * deps(4)
-        dsigma(5) = 2.d0*Gmax * deps(5)
-        dsigma(6) = 2.d0*Gmax * deps(6)
+        ! dsigma(4) = 2.d0*Gmax * deps(4)
+        ! dsigma(5) = 2.d0*Gmax * deps(5)
+        ! dsigma(6) = 2.d0*Gmax * deps(6)
+        dsigma(4) = Gmax * deps(4)
+        dsigma(5) = Gmax * deps(5)
+        dsigma(6) = Gmax * deps(6)
         
       
     end subroutine IWAN_elastic  
@@ -326,10 +350,10 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         real*8, intent(inout) :: F
        
         F = 0.d0
-        F = 0.5* ( (S(1)-Sa(1))**2 + (S(2)-Sa(2))**2+ (S(3)-Sa(3))**2 + &
-                        2.d0* (S(4)-Sa(4))**2 + &
-                        2.d0* (S(5)-Sa(5))**2 + &
-                        2.d0* (S(6)-Sa(6))**2)
+        F = 0.5d0* ( (S(1)-Sa(1))**2.d0 + (S(2)-Sa(2))**2.d0+ (S(3)-Sa(3))**2.d0 + &
+                        2.d0* (S(4)-Sa(4))**2.d0 + &
+                        2.d0* (S(5)-Sa(5))**2.d0 + &
+                        2.d0* (S(6)-Sa(6))**2.d0)
       
     end subroutine IWAN_surface  
 
@@ -344,11 +368,11 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         real*8, intent(in) :: de(6)
         real*8, intent(inout) :: dF
        
-        dF = 0.0
-        dF = 0.5*( (S(1)-Sa(1))*de(1) + (S(2)-Sa(2))*de(2) + (S(3)-Sa(3))*de(3) + &
-                        2d0* (S(4)-Sa(4))*de(4) + &
-                        2d0* (S(5)-Sa(5))*de(5) + &
-                        2d0* (S(6)-Sa(6))*de(6) )
+        dF = 0.0d0
+        dF = 0.5d0*( (S(1)-Sa(1))*de(1) + (S(2)-Sa(2))*de(2) + (S(3)-Sa(3))*de(3) + &
+                        2.d0* (S(4)-Sa(4))*de(4) + &
+                        2.d0* (S(5)-Sa(5))*de(5) + &
+                        2.d0* (S(6)-Sa(6))*de(6) )
       
       end subroutine IWAN_dsurface  
 
@@ -368,15 +392,19 @@ end subroutine MAKE_STRESS_TENSOR_IWAN
         integer*4 :: j,m,k
         real*8    :: ss(6)
         
-        ss(1:3) = 1.d0
-        ss(4:6) = 2.d0
+        ss(1) = 1.d0;
+        ss(2) = 1.d0;
+        ss(3) = 1.d0;
+        ss(4) = 2.d0;
+        ss(5) = 2.d0;
+        ss(6) = 2.d0;
         
         j = start1
         do while (j .lt. aktif+1)
             do m = 1,6
                 do k = 1,6    
                     Ed(m,k) = Ed(m,k)+ CNinv(j)* ss(k)* (S1(m)-Sa1(j,m))&
-                                *(S1(k)-Sa1(j,k))/ (2.0* F1(j))
+                                *(S1(k)-Sa1(j,k))/ (2.d0* F1(j))
                 enddo
             enddo
             j = j+1

@@ -36,7 +36,7 @@
 
         !include 'SPEED.MPI'
 
-        integer*4 :: im, im_nlp, ifunc, ie, nn
+        integer*4 :: im, im_nlp, ifunc, ie, nn, dum_log, ispr
 
         real*8 :: ref_strain
         real*8 :: dum1, strain_min, strain_max
@@ -137,6 +137,10 @@
                         if (.NOT.nlp_pressdep_flag) then
                             ref_strain = func_data(func_indx(ifunc) + 1)
 
+                            ! = ceiling(dlog10(ref_strain));
+                            !strain_min = 10.d0**(-3+dum_log)
+                            !strain_max = 10.d0**( 2+dum_log)
+
                             strain_min = 1.0d-6
                             strain_max = 1.0d-1                        
                             call nonlinear_mu_degradation_hyperbola(mpii_mat(im_nlp)%nspring, strain_min, strain_max, &
@@ -168,6 +172,16 @@
                     nlp_elem(ie)%F2 = 0.d0;
                     nlp_elem(ie)%Sa1 = 0.001;
                 endif
+            enddo
+        enddo
+
+        do im_nlp = 1, nmat_nlp
+            write(*,*) 'imat = ',im_nlp, 'Gmax = ',mpii_mat(im_nlp)%Gmax, 'ref_strain = ',ref_strain
+            
+            do ispr=1,(mpii_mat(im_nlp)%nspring-1)
+                write(*,*) 'Strains = ',mpii_mat(im_nlp)%spr_strain(ispr) ,'G/Gmax = ', &
+                    mpii_mat(im_nlp)%spr_GbyGmax(ispr), 'Yield Stress = ',mpii_mat(im_nlp)%spr_yldstress(ispr) ,&
+                    'CNinv = ',  mpii_mat(im_nlp)%spr_CNinv(ispr)
             enddo
         enddo
 

@@ -223,8 +223,11 @@
         strain_xx = 0.5d0* (sxx - stress_vol)/Mu + strain_vol
         strain_yy = 0.5d0* (syy - stress_vol)/Mu + strain_vol
         strain_zz = 0.5d0* (szz - stress_vol)/Mu + strain_vol
-        strain_yz = 0.5d0* (syz/Mu)
-        strain_xz = 0.5d0* (szx/Mu)
-        strain_xy = 0.5d0* (sxy/Mu)
+        ! strain_yz = 0.5d0* (syz/Mu)
+        ! strain_xz = 0.5d0* (szx/Mu)
+        ! strain_xy = 0.5d0* (sxy/Mu)
+        strain_yz = (syz/Mu)
+        strain_xz = (szx/Mu)
+        strain_xy = (sxy/Mu)
         
      end subroutine MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR

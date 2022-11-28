@@ -47,7 +47,7 @@
                    ic, ih, ik, il, it, ipos, ineg, &
                    isnap, its, fn, nn, ip, im, imon, iaz, &
                    i, j, k, is, in, id, istage, itime, &
-                   ie, ielem, count_monitor, find_tag, icase, irand, interest_node(1)
+                   ie, ielem, count_monitor, find_tag, icase, irand, interest_node(1), k11
                    
       ! Elapsed time print-out iteration divisor
       integer*4 :: it_divisor = 1000
@@ -81,7 +81,7 @@
                                                mv_el, &
                                                vx_el, vy_el, vz_el, &
                                                div_el, rotx_el, roty_el, rotz_el, &
-                                               rho_el, lambda_el, mu_el, gamma_el             
+                                               rho_el, lambda_el, mu_el, gamma_el, Kbulk             
 
 ! MPI
      integer*4, dimension(mpi_np)         :: send_length, recv_length, small_send_length, small_recv_length
@@ -856,11 +856,11 @@
       endif
 
 ! Debug - finding the node that is close to interested region
-      do id = 1, nnod_loc
-         dist_temp(id) = dsqrt((xx_spx_loc(id) - 0)**2 + (yy_spx_loc(id) - 0)**2 + (zz_spx_loc(id) + 14100)**2 )
-      enddo
-      interest_node = int(minloc(dist_temp));
-      zeta_debug = 0.d0;
+      ! do id = 1, nnod_loc
+      !    dist_temp(id) = dsqrt((xx_spx_loc(id) - 0)**2 + (yy_spx_loc(id) - 0)**2 + (zz_spx_loc(id) + 14100)**2 )
+      ! enddo
+      interest_node(1) = 0; !int(minloc(dist_temp));
+      !zeta_debug = 0.d0;
 
 !---------------------------------------------------------------------------
 !     BEGINNING OF THE TIME LOOP
@@ -891,7 +891,7 @@
             zeta_node_t0 = zeta_node_t1;  zeta_node_t1 = 0.d0;
             do i=1,N_SLS
                exp_Trelax(i) = dexp(-deltat/Trelax(i))
-               zeta_debug(its,i) = zeta_node_t0(6*(interest_node(1) -1) + 6, i);
+               !zeta_debug(its,i) = zeta_node_t0(6*(interest_node(1) -1) + 6, i);
             enddo
          endif
 
@@ -1091,6 +1091,7 @@
 !$OMP PRIVATE(im_nle,which_mat_nle,Depth_nle,gamma_new) &
 !$OMP PRIVATE(k,j,i,is,in,iaz,strain_visc_xx,strain_visc_xy) &
 !$OMP PRIVATE(strain_visc_xz,strain_visc_yy,strain_visc_yz,strain_visc_zz,QS_nh,QP_nh) &
+!$OMP PRIVATE(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_xy,strain_el_yz, strain_el_xz, Kbulk) &
 !$OMP PRIVATE(Y_lambda_nh,Y_mu_nh)
  
 !$OMP DO
@@ -1401,7 +1402,7 @@
                                     strain_visc_yy, strain_visc_yz, strain_visc_zz, &
                                     Y_lambda_nh(1,:),Y_mu_nh(1,:), N_SLS, &                                
                                     sxx_el,syy_el,szz_el,&                                
-                                    syz_el,szx_el,sxy_el,ie)        
+                                    syz_el,szx_el,sxy_el,ie) 
                                    
                      elseif (damping_type .eq. 4) then
 
@@ -1437,11 +1438,16 @@
 
                         if (damping_type.eq.2) Kbulk = lambda_el + 2.d0*mu_el/3.d0;
                         if (damping_type.eq.4) Kbulk = lambda_el - 4.d0*mu_el/3.d0;    !here lambda is P-wave modulus
+
+                        strain_el_xx = 0.d0; strain_el_yy=0.d0; strain_el_zz=0.d0; 
+                        strain_el_yz = 0.d0; strain_el_xz=0.d0; strain_el_xy=0.d0; 
                         
-                        call MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, mu_el, Kbulk, &
-                                             nn, ie, sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el, &
-                                             strain_el_xx, strain_el_yy, strain_el_zz, &
-                                             strain_el_yz, strain_el_xz, strain_el_xy)
+                        !if (ie.eq.5276) write(*,*) 'Stess Matrix - IN :', sxx_el(3,1,3)
+                        ! call MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, mu_el, Kbulk, &
+                        !                      nn, ie, sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el, &
+                        !                      strain_el_xx, strain_el_yy, strain_el_zz, &
+                        !                      strain_el_yz, strain_el_xz, strain_el_xy)
+                        !if (ie.eq.5276) write(*,*) 'Strain Matrix - out :', strain_el_xx(3,1,3)
 
                         ! Writing Strain at Nodes, to print output/ also for Non-linear implementation
                         do k = 1,nn
@@ -1455,37 +1461,53 @@
                                     strain(iaz+4) = strain(iaz+4) + strain_el_xy(i,j,k) /node_counter(in)
                                     strain(iaz+5) = strain(iaz+5) + strain_el_yz(i,j,k) /node_counter(in)
                                     strain(iaz+6) = strain(iaz+6) + strain_el_xz(i,j,k) /node_counter(in)
+
+                                    ! if ( (ie.eq.1) .and. ((i+j+k).eq.3) )  then
+                                    !    interest_node(1) = iaz;
+                                    ! endif
+
+                                    ! if (interest_node(1).eq.iaz) then
+                                    !    write(*,*) 'ie', ie, i, j, k
+                                    !    write(*,*) 'old strain ', (oldstrain(iaz + k11), k11=1,6)
+                                    !    write(*,*) 'old stress ', (oldstress(iaz + k11), k11=1,6)
+                                    !    write(*,*) 'ouput strain ', (strain(iaz + k11), k11=1,6)
+                                    !    write(*,*) 'strain_xx_el = ', strain_el_xx(i,j,k), sxx_el(i,j,k)
+                                    !    if (oldstrain(iaz+1).gt.1) write(*,*) 'Instability at Element ,i , j ,k : ', ie, i, j, k
+                                    ! endif
                                  enddo
                               enddo
                         enddo
+                        
 
-                        if (nmat_nlp.eq.0) then 
-                           deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy)
-                        endif
+                        ! if (nmat_nlp.eq.0) then 
+                           deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
+                        ! endif
                      endif
 
-                     if (nmat_nlp .gt. 0) then
-                        sxx_el = 0.d0;    syy_el = 0.d0;    szz_el = 0.d0;
-                        sxy_el = 0.d0;    syz_el = 0.d0;    szx_el = 0.d0;
-                        do im_nlp = 1, nmat_nlp
-                           if (tag_mat_nlp(im_nlp) .eq. tag_mat(im)) then
-                              call MAKE_STRESS_TENSOR_IWAN( its, nnod_loc, con_nnz_loc, con_spx_loc, &
-                                                   ie, nn, mpii_mat(im_nlp), mpii_mat(im_nlp)%nspring, &
-                                                   nlp_pressdep_flag, oldstrain, oldstress, &
-                                                   strain_el_xx, strain_el_yy, strain_el_zz, &        ! IN: Strain - current time step
-                                                   strain_el_xy, strain_el_yz, strain_el_xz, & 
-                                                   nlp_elem(ie)%Sa1, nlp_elem(ie)%F2, nlp_elem(ie)%activefsur, &   ! IN-OUT: Origin Stess for hardening rule; Vonmises stress corresponding to each iwan spring yield level; currently active Iwan spring yield surface
-                                                   sxx_el, syy_el, szz_el, &                          ! OUT: Total Stress Tensor
-                                                   sxy_el, syz_el, szx_el)
-                                                   !dplastxx_el, dplastyy_el, dplastzz_el, &           ! OUT: Plastic Strain Increment (only used for pressure dependednt model)
-                                                   !dplastxy_el, dplastyz_el, dplastzx_el, &
-                                                   !S1xx_el, S1yy_el, S1zz_el, &                       ! IN-OUT: Deviatoric Stress Tensor for Vonmises stress calculation
-                                                   !S1xy_el, S1yz_el, S1zx_el, &
-                           endif
-                        enddo
-                        deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy)
-                     endif
-
+                     ! if (nmat_nlp .gt. 0) then
+                     !    !if (ie.eq.10) then
+                     !    sxx_el = 0.d0;    syy_el = 0.d0;    szz_el = 0.d0;
+                     !    sxy_el = 0.d0;    syz_el = 0.d0;    szx_el = 0.d0;
+                     !    do im_nlp = 1, nmat_nlp
+                     !       if (tag_mat_nlp(im_nlp) .eq. tag_mat(im)) then
+                     !          call MAKE_STRESS_TENSOR_IWAN( its, nnod_loc, con_nnz_loc, con_spx_loc, &
+                     !                               ie, nn, mpii_mat(im_nlp), mpii_mat(im_nlp)%nspring, &
+                     !                               nlp_pressdep_flag, oldstrain, oldstress, &
+                     !                               strain_el_xx, strain_el_yy, strain_el_zz, &        ! IN: Strain - current time step
+                     !                               strain_el_xy, strain_el_yz, strain_el_xz, & 
+                     !                               nlp_elem(ie)%Sa1, nlp_elem(ie)%F2, nlp_elem(ie)%activefsur, &   ! IN-OUT: Origin Stess for hardening rule; Vonmises stress corresponding to each iwan spring yield level; currently active Iwan spring yield surface
+                     !                               sxx_el, syy_el, szz_el, &                          ! OUT: Total Stress Tensor
+                     !                               sxy_el, syz_el, szx_el)
+                     !                               !dplastxx_el, dplastyy_el, dplastzz_el, &           ! OUT: Plastic Strain Increment (only used for pressure dependednt model)
+                     !                               !dplastxy_el, dplastyz_el, dplastzx_el, &
+                     !                               !S1xx_el, S1yy_el, S1zz_el, &                       ! IN-OUT: Deviatoric Stress Tensor for Vonmises stress calculation
+                     !                               !S1xy_el, S1yz_el, S1zx_el, &
+                     !       endif
+                     !    enddo
+                     !    !endif
+                     !    deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
+                     ! endif
+                     !deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
                  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                                   
                  
@@ -1627,6 +1649,18 @@
 !$OMP END PARALLEL
 
          endif
+
+
+         ! open(2501,file='strain1650.txt')
+         ! do id = 1,nnod_loc
+         !    write(2501,*) (strain(6*(id-1)+k11),k11=1,6)
+         ! enddo
+         ! close(2501)
+         ! open(2501,file='stress1650.txt')
+         ! do id = 1,nnod_loc
+         !    write(2501,*) (stress(6*(id-1)+k11),k11=1,6)
+         ! enddo
+         ! close(2501)
 
 
 
@@ -2273,6 +2307,8 @@
 !---------------------------------------------------------------------------
 
 !! OMP DO COULD BE INSERTED HERE
+          !write(*,*) 'Before Exchanging Strain ', (stress(iaz + k11), k11=1,6)
+          !write(*,*) 'Before Exchanging Stress ', (stress(iaz + k11), k11=1,6)
 
          if ( (opt_out_var(4) .eq. 1) .or. (nmat_nlp.gt.0) )then
            allocate(double_send_buffer(6*nsend)); double_send_buffer = 0.0d0
@@ -2340,6 +2376,8 @@
             deallocate(double_send_buffer,double_recv_buffer)
         
          endif
+         !write(*,*) 'After Exchanging Strain ', (stress(iaz + k11), k11=1,6)
+         !write(*,*) 'After Exchanging Stress ', (stress(iaz + k11), k11=1,6)
 
          if(opt_out_var(6) .eq. 1) then
          
@@ -2507,6 +2545,32 @@
    !    write(2501,*) (zeta_debug(id,i), i=1,N_SLS)
    !  enddo
    !  close(2501)
+
+! Debug NLP                              
+   !  open(2501,file='oldstress.txt')
+   !  do id = 1,nnod_loc
+   !    write(2501,*) (oldstress(6*(id-1)+k11),k11=1,6)
+   !  enddo
+   !  close(2501)
+
+   !  open(2501,file='oldstrain.txt')
+   !  do id = 1,nnod_loc
+   !    write(2501,*) (oldstrain(6*(id-1)+k11),k11=1,6)
+   !  enddo
+   !  close(2501)
+
+    open(2501,file='stress.txt')
+    do id = 1,nnod_loc
+      write(2501,*) (stress(6*(id-1)+k11),k11=1,6)
+    enddo
+    close(2501)
+
+    open(2501,file='strain.txt')
+    do id = 1,nnod_loc
+      write(2501,*) (strain(6*(id-1)+k11),k11=1,6)
+    enddo
+    close(2501)
+    if (its.eq.0) call EXIT()
          
 !---------------------------------------------------------------------------
 !     COMPUTE ERROR

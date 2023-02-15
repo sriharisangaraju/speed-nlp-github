@@ -47,12 +47,12 @@
                    ic, ih, ik, il, it, ipos, ineg, &
                    isnap, its, fn, nn, ip, im, imon, iaz, &
                    i, j, k, is, in, id, istage, itime, &
-                   ie, ielem, count_monitor, find_tag, icase, irand, interest_node(1), k11
+                   ie, ielem, count_monitor, find_tag, icase, irand, interest_node(1),interest_node_mpi_num(1), k11
                    
       ! Elapsed time print-out iteration divisor
       integer*4 :: it_divisor = 1000
 
-      integer*4, dimension(:), allocatable :: node_counter
+      integer*4, dimension(:), allocatable :: node_counter, vtk_numbering
 
 
       real*8 :: start_time, final_time, time_in_seconds, &
@@ -122,8 +122,11 @@
 ! NON LINEAR - PLASTIC MATERIAL
       integer*4                                :: im_nlp, nsurf_vel !max_nspr
       real*8, dimension(nnod_loc)              :: dist_temp
+      real*8, dimension(mpi_np)                :: dist_temp_glo
       real*8, dimension(0:nts,N_SLS)           :: zeta_debug
-      real*8, dimension(:), allocatable        :: oldstrain, oldstress         ! also stress and strain,
+      real*8, dimension(0:nts,6,6)           :: node_stress_debug     !strain, dstrain, ddevstrain, ddevstress, dstress, stress 
+      real*8, dimension(0:nts,6)           :: node_vmc_debug     !vonmisesstress, active surface
+      real*8, dimension(:), allocatable        :: oldstrain, oldstress, strain_damped         ! also stress and strain,
       real*8, dimension(:,:,:), allocatable    :: strain_el_xx, strain_el_yy, strain_el_zz, &
                                                   strain_el_xy, strain_el_yz, strain_el_xz
       ! real*8, dimension(:), allocatable        :: S1, dplastic
@@ -310,6 +313,7 @@
       endif   
       if( (opt_out_var(5) .eq. 1) .or. (damping_type .eq. 2) .or. (nmat_nlp .gt. 0) ) then
          allocate(strain(6*nnod_loc)); strain = 0.d0
+         allocate(strain_damped(6*nnod_loc)); strain_damped = 0.d0
       endif
       if(opt_out_var(6) .eq. 1) then
          allocate(omega(3*nnod_loc)); omega = 0.d0
@@ -857,10 +861,14 @@
 
 ! Debug - finding the node that is close to interested region
       ! do id = 1, nnod_loc
-      !    dist_temp(id) = dsqrt((xx_spx_loc(id) - 0)**2 + (yy_spx_loc(id) - 0)**2 + (zz_spx_loc(id) + 14100)**2 )
+      !    dist_temp(id) = dsqrt((xx_spx_loc(id) - 0)**2 + (yy_spx_loc(id) - 50)**2 + (zz_spx_loc(id) + 471.428)**2 )
       ! enddo
-      interest_node(1) = 0; !int(minloc(dist_temp));
-      !zeta_debug = 0.d0;
+      ! interest_node(1) = int(minloc(dist_temp));
+      ! call MPI_BARRIER(mpi_comm, mpi_ierr)          
+      ! call MPI_ALLGATHER(dist_temp(interest_node(1)), 1, SPEED_DOUBLE, dist_temp_glo, 1, SPEED_DOUBLE, mpi_comm, mpi_ierr) 
+      ! interest_node_mpi_num(1) = int(minloc(dist_temp_glo));       
+      ! zeta_debug = 0.d0;
+      call GET_INDLOC_FROM_INDGLO(local_el_num, nelem_loc, 350, interest_node_mpi_num(1))   
 
 !---------------------------------------------------------------------------
 !     BEGINNING OF THE TIME LOOP
@@ -877,14 +885,14 @@
 
       do its = 0,nts
          if (nmat_nlp.gt.0) then
-            oldstrain = strain;
+            oldstrain = strain_damped;
             oldstress = stress;
          endif
          
          if ((opt_out_var(4) .eq. 1) .or. (nmat_nlp.gt.0)) stress = 0.d0
          
          if ((opt_out_var(5) .eq. 1) .or. (damping_type .eq. 2) .or. (nmat_nlp.gt.0)) then
-            strain = 0.d0
+            strain = 0.d0; strain_damped = 0.d0;
          endif
          
          if (damping_type .eq. 4) then
@@ -1156,7 +1164,11 @@
                    !|
                    !+----------------------------------------------------------------------------------------
                    rho_el = prop_mat(im,1); lambda_el = prop_mat(im,2)                                        
-                   mu_el = prop_mat(im,3);  gamma_el = prop_mat(im,4)                                        
+                   mu_el = prop_mat(im,3);  gamma_el = prop_mat(im,4)                        
+                     
+                  if (interest_node_mpi_num(1).ne.0) then
+                     if (interest_node_mpi_num(1).eq.ie) write(*,*) 'loc_elem = ', ie, 'rho_el =', prop_mat(im,1)
+                  endif
                      
                    do k = 1,nn
                       do j = 1,nn
@@ -1361,7 +1373,7 @@
                        
                        endif
                            
-                        if (nmat_nlp.eq.0) then           
+                        ! if (nmat_nlp.eq.0) then           
                         do k = 1,nn
                            do j = 1,nn
                               do i = 1,nn
@@ -1392,7 +1404,7 @@
                              enddo
                           enddo
                         enddo 
-                        endif
+                        ! endif
                         
                         call MAKE_STRESS_TENSOR_DAMPED(nn,lambda_el,mu_el,&                                        
                                     duxdx_el,duydx_el,duzdx_el,&                                
@@ -1403,6 +1415,9 @@
                                     Y_lambda_nh(1,:),Y_mu_nh(1,:), N_SLS, &                                
                                     sxx_el,syy_el,szz_el,&                                
                                     syz_el,szx_el,sxy_el,ie) 
+                        
+                        ! if (ie.eq.119) write(*,*)'ie =', ie, 'Damped Stress = ', sxx_el(1,1,1), syy_el(1,1,1), szz_el(1,1,1), &
+                        !                                                     sxy_el(1,1,1), syz_el(1,1,1), szx_el(1,1,1)
                                    
                      elseif (damping_type .eq. 4) then
 
@@ -1432,7 +1447,7 @@
                   !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                   ! Nonlinear - plastic Iwan (from Fabian)
                   !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-                     if ((nmat_nlp.gt.0) .or. ((damping_type.eq.4) .and. (opt_out_var(5).eq.1)) )then     ! Only with Damping 2 and 4
+                     if ((nmat_nlp.gt.0) .or. ( ((damping_type.eq.4) .or. (damping_type.eq.2)) .and. (opt_out_var(5).eq.1)) )then     ! Only with Damping 2 and 4
                         allocate(strain_el_xx(nn,nn,nn), strain_el_yy(nn,nn,nn), strain_el_zz(nn,nn,nn), &
                                  strain_el_yz(nn,nn,nn), strain_el_xz(nn,nn,nn), strain_el_xy(nn,nn,nn), Kbulk(nn,nn,nn))
 
@@ -1442,25 +1457,38 @@
                         strain_el_xx = 0.d0; strain_el_yy=0.d0; strain_el_zz=0.d0; 
                         strain_el_yz = 0.d0; strain_el_xz=0.d0; strain_el_xy=0.d0; 
                         
-                        !if (ie.eq.5276) write(*,*) 'Stess Matrix - IN :', sxx_el(3,1,3)
-                        ! call MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, mu_el, Kbulk, &
-                        !                      nn, ie, sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el, &
-                        !                      strain_el_xx, strain_el_yy, strain_el_zz, &
-                        !                      strain_el_yz, strain_el_xz, strain_el_xy)
-                        !if (ie.eq.5276) write(*,*) 'Strain Matrix - out :', strain_el_xx(3,1,3)
+                        !if (ie.eq.5276) write(*,*) 'Stess Matrix - IN sxx_el,sxz_el:', 2.d0, 3.d0
+                        !if (ie.eq.5276) write(*,*) 'Stess Matrix - IN mu, kbulk :', mu_el(3,1,3), Kbulk(3,1,3)
+                        ! if (its.gt.0) then
+                        !            sxx_el = (22.d0*its)*2.d0; syy_el = (22.d0*its)*0.5d0; szz_el = (22.d0*its)*1.5d0;
+                        !            syz_el = (22.d0*its)*0.5d0; szx_el = (22.d0*its)*3.0d0; sxy_el = (22.d0*its)*2.d0;
+                        ! elseif (its.eq.0) then
+                        !            sxx_el = 0.d0; syy_el = 0.0d0; szz_el = 0.d0;
+                        !            syz_el = 0.d0; szx_el = 0.0d0; sxy_el = 0.d0;
+                        ! endif
+                        call MAKE_STRAIN_TENSOR_FROM_STRESSTENSOR(nn, mu_el, Kbulk, &
+                                             sxx_el, syy_el, szz_el, syz_el, szx_el, sxy_el, &
+                                             strain_el_xx, strain_el_yy, strain_el_zz, &
+                                             strain_el_yz, strain_el_xz, strain_el_xy)
+                        !if (ie.eq.5276) write(*,*) 'Strain Matrix - out strain_xx_el,strain_xz_el :', strain_el_xx(3,1,3), strain_el_xz(3,1,3)
+                        ! if (ie.eq.119) write(*,*)'ie = ', ie, 'Damped Strain = ', strain_el_xx(1,1,1), strain_el_yy(1,1,1), strain_el_zz(1,1,1), &
+                        !                                                 strain_el_xy(1,1,1), strain_el_yz(1,1,1), strain_el_xz(1,1,1)
 
                         ! Writing Strain at Nodes, to print output/ also for Non-linear implementation
                         do k = 1,nn
                               do j = 1,nn
                                  do i = 1,nn
                                     is = nn*nn*(k -1) + nn*(j -1) + i
+                                    !write(*,*) 'ie = ', ie, 'k = ', k, 'j = ', j, 'i = ', i, is, con_spx_loc(ie -1)
                                     in = con_spx_loc(con_spx_loc(ie -1) + is);    iaz = 6*(in - 1 )
-                                    strain(iaz+1) = strain(iaz+1) + strain_el_xx(i,j,k) /node_counter(in)
-                                    strain(iaz+2) = strain(iaz+2) + strain_el_yy(i,j,k) /node_counter(in)
-                                    strain(iaz+3) = strain(iaz+3) + strain_el_zz(i,j,k) /node_counter(in)
-                                    strain(iaz+4) = strain(iaz+4) + strain_el_xy(i,j,k) /node_counter(in)
-                                    strain(iaz+5) = strain(iaz+5) + strain_el_yz(i,j,k) /node_counter(in)
-                                    strain(iaz+6) = strain(iaz+6) + strain_el_xz(i,j,k) /node_counter(in)
+                                    !if (in.eq.6000) write(*,*) 'strain_in, node_counter, strain_el_zx', strain(iaz+6), node_counter(in), strain_el_xz(i,j,k)
+                                    strain_damped(iaz+1) = strain_damped(iaz+1) + strain_el_xx(i,j,k) /node_counter(in)
+                                    strain_damped(iaz+2) = strain_damped(iaz+2) + strain_el_yy(i,j,k) /node_counter(in)
+                                    strain_damped(iaz+3) = strain_damped(iaz+3) + strain_el_zz(i,j,k) /node_counter(in)
+                                    strain_damped(iaz+4) = strain_damped(iaz+4) + strain_el_xy(i,j,k) /node_counter(in)
+                                    strain_damped(iaz+5) = strain_damped(iaz+5) + strain_el_yz(i,j,k) /node_counter(in)
+                                    strain_damped(iaz+6) = strain_damped(iaz+6) + strain_el_xz(i,j,k) /node_counter(in)
+                                    ! if (in.eq.6000) write(*,*) 'strain_out', strain(iaz+6)
 
                                     ! if ( (ie.eq.1) .and. ((i+j+k).eq.3) )  then
                                     !    interest_node(1) = iaz;
@@ -1479,35 +1507,39 @@
                         enddo
                         
 
-                        ! if (nmat_nlp.eq.0) then 
+                        if (nmat_nlp.eq.0) then 
                            deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
-                        ! endif
+                        endif
                      endif
 
-                     ! if (nmat_nlp .gt. 0) then
-                     !    !if (ie.eq.10) then
-                     !    sxx_el = 0.d0;    syy_el = 0.d0;    szz_el = 0.d0;
-                     !    sxy_el = 0.d0;    syz_el = 0.d0;    szx_el = 0.d0;
-                     !    do im_nlp = 1, nmat_nlp
-                     !       if (tag_mat_nlp(im_nlp) .eq. tag_mat(im)) then
-                     !          call MAKE_STRESS_TENSOR_IWAN( its, nnod_loc, con_nnz_loc, con_spx_loc, &
-                     !                               ie, nn, mpii_mat(im_nlp), mpii_mat(im_nlp)%nspring, &
-                     !                               nlp_pressdep_flag, oldstrain, oldstress, &
-                     !                               strain_el_xx, strain_el_yy, strain_el_zz, &        ! IN: Strain - current time step
-                     !                               strain_el_xy, strain_el_yz, strain_el_xz, & 
-                     !                               nlp_elem(ie)%Sa1, nlp_elem(ie)%F2, nlp_elem(ie)%activefsur, &   ! IN-OUT: Origin Stess for hardening rule; Vonmises stress corresponding to each iwan spring yield level; currently active Iwan spring yield surface
-                     !                               sxx_el, syy_el, szz_el, &                          ! OUT: Total Stress Tensor
-                     !                               sxy_el, syz_el, szx_el)
-                     !                               !dplastxx_el, dplastyy_el, dplastzz_el, &           ! OUT: Plastic Strain Increment (only used for pressure dependednt model)
-                     !                               !dplastxy_el, dplastyz_el, dplastzx_el, &
-                     !                               !S1xx_el, S1yy_el, S1zz_el, &                       ! IN-OUT: Deviatoric Stress Tensor for Vonmises stress calculation
-                     !                               !S1xy_el, S1yz_el, S1zx_el, &
-                     !       endif
-                     !    enddo
-                     !    !endif
-                     !    deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
-                     ! endif
-                     !deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
+                     if (nmat_nlp .gt. 0) then
+                        do im_nlp = 1, nmat_nlp
+                           if (tag_mat_nlp(im_nlp) .eq. tag_mat(im)) then
+                              sxx_el = 0.d0;    syy_el = 0.d0;    szz_el = 0.d0;
+                              sxy_el = 0.d0;    syz_el = 0.d0;    szx_el = 0.d0;
+
+                              if (its.eq.0) allocate(nlp_elem(ie)%spr_yldstress(mpii_mat(im_nlp)%nspring))
+                              if (its.eq.0) allocate(nlp_elem(ie)%spr_CNinv(mpii_mat(im_nlp)%nspring - 1))
+
+                              if (rho_el(1,1,1).ge.1721.d0) write(*,*) 'Rho for nonlinear mat greter than given value at element = ', ie
+
+                              call MAKE_STRESS_TENSOR_IWAN( its, nnod_loc, con_nnz_loc, con_spx_loc, &
+                                                   ie, nn, mpii_mat(im_nlp), mpii_mat(im_nlp)%nspring, &
+                                                   nlp_pressdep_flag, oldstrain, oldstress, &
+                                                   strain_el_xx, strain_el_yy, strain_el_zz, &        ! IN: Strain - current time step
+                                                   strain_el_xy, strain_el_yz, strain_el_xz, & 
+                                                   nlp_elem(ie)%Sa1, nlp_elem(ie)%F2, nlp_elem(ie)%activefsur, &   ! IN-OUT: Origin Stess for hardening rule; Vonmises stress corresponding to each iwan spring yield level; currently active Iwan spring yield surface
+                                                   sxx_el, syy_el, szz_el, &                          ! OUT: Total Stress Tensor
+                                                   sxy_el, syz_el, szx_el, &
+                                                   mu_el, lambda_el, Kbulk, nlp_elem(ie)%spr_yldstress, nlp_elem(ie)%spr_CNinv)
+                                                   !dplastxx_el, dplastyy_el, dplastzz_el, &           ! OUT: Plastic Strain Increment (only used for pressure dependednt model)
+                                                   !dplastxy_el, dplastyz_el, dplastzx_el, &
+                                                   !S1xx_el, S1yy_el, S1zz_el, &                       ! IN-OUT: Deviatoric Stress Tensor for Vonmises stress calculation
+                                                   !S1xy_el, S1yz_el, S1zx_el, &
+                           endif
+                        enddo
+                        deallocate(strain_el_xx,strain_el_yy,strain_el_zz,strain_el_yz,strain_el_xz,strain_el_xy, Kbulk)
+                     endif
                  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                                   
                  
@@ -2216,7 +2248,7 @@
                        * ( 2.0d0 * u1(iaz) - u0(iaz) ) ) / (mv(iaz)/deltat2 + mc(iaz)/(2*deltat) )
                        
                endif
-               if(abs(u2(iaz)).lt. 1.0e-30) u2(iaz) = 0.d0  
+               if(abs(u2(iaz)).lt. 1.0e-30) u2(iaz) = 1.0e-30  
                
                iaz = 3*(id -1) +2
                if (make_damping_yes_or_not.eq. 0 .or. damping_type .eq. 2 .or. damping_type .eq. 4) then
@@ -2228,7 +2260,7 @@
                        * ( 2.0d0 * u1(iaz) - u0(iaz) ) ) &                                        
                        / (mv(iaz)/deltat2 + mc(iaz)/(2*deltat) )                                        
                endif
-               if(abs(u2(iaz)).lt. 1.0e-30) u2(iaz) = 0.d0           
+               if(abs(u2(iaz)).lt. 1.0e-30) u2(iaz) = 1.0e-30           
 
                iaz = 3*(id -1) +3
                if (make_damping_yes_or_not.eq. 0 .or. damping_type .eq. 2 .or. damping_type .eq. 4) then 
@@ -2239,7 +2271,7 @@
                          + (mc(iaz)/(2*deltat)) * u0(iaz) + (mv(iaz)/deltat2) &                         
                          * ( 2.0d0 * u1(iaz) - u0(iaz) ) )  / (mv(iaz)/deltat2 + mc(iaz)/(2*deltat) )                       
                endif
-               if(abs(u2(iaz)).lt. 1.0e-30) u2(iaz) = 0.d0 
+               if(abs(u2(iaz)).lt. 1.0e-30) u2(iaz) = 1.0e-30
 
 
             enddo
@@ -2343,7 +2375,7 @@
          endif
 
 
-         if ( (opt_out_var(5) .eq. 1) .or. (damping_type .eq. 2) .or. (nmat_nlp.gt.0) ) then
+         if ( (opt_out_var(5) .eq. 1) .or. (damping_type .eq. 2) ) then
          
            allocate(double_send_buffer(6*nsend)); double_send_buffer = 0.0d0
            allocate(double_recv_buffer(6*nrecv)); double_recv_buffer = 0.0d0
@@ -2376,6 +2408,41 @@
             deallocate(double_send_buffer,double_recv_buffer)
         
          endif
+
+         if ( ((opt_out_var(5) .eq. 1) .and. (damping_type .eq. 4)) .or. (nmat_nlp.gt.0) ) then
+         
+           allocate(double_send_buffer(6*nsend)); double_send_buffer = 0.0d0
+           allocate(double_recv_buffer(6*nrecv)); double_recv_buffer = 0.0d0
+
+            do i = 1,nsend
+               in = node_send(i)
+               double_send_buffer(6*(i -1) +1) = strain_damped(6*(in -1) +1)
+               double_send_buffer(6*(i -1) +2) = strain_damped(6*(in -1) +2)
+               double_send_buffer(6*(i -1) +3) = strain_damped(6*(in -1) +3)
+               double_send_buffer(6*(i -1) +4) = strain_damped(6*(in -1) +4)
+               double_send_buffer(6*(i -1) +5) = strain_damped(6*(in -1) +5)
+               double_send_buffer(6*(i -1) +6) = strain_damped(6*(in -1) +6)
+            enddo
+         
+        call EXCHANGE_DOUBLE(6*nsend,double_send_buffer,6*nrecv,double_recv_buffer,&
+                                   mpi_np,double_send_length,double_recv_length,&
+                                   mpi_comm,mpi_stat,mpi_ierr,mpi_id)
+         
+            do i = 1,nrecv
+               in = node_recv(i)
+               strain_damped(6*(in -1) +1) = double_recv_buffer(6*(i -1) +1)
+               strain_damped(6*(in -1) +2) = double_recv_buffer(6*(i -1) +2)
+               strain_damped(6*(in -1) +3) = double_recv_buffer(6*(i -1) +3)
+               strain_damped(6*(in -1) +4) = double_recv_buffer(6*(i -1) +4)
+               strain_damped(6*(in -1) +5) = double_recv_buffer(6*(i -1) +5)
+               strain_damped(6*(in -1) +6) = double_recv_buffer(6*(i -1) +6)
+            enddo
+            
+
+            deallocate(double_send_buffer,double_recv_buffer)
+        
+         endif
+
          !write(*,*) 'After Exchanging Strain ', (stress(iaz + k11), k11=1,6)
          !write(*,*) 'After Exchanging Stress ', (stress(iaz + k11), k11=1,6)
 
@@ -2422,7 +2489,7 @@
         if (mod(its,ndt_mon_lst) .eq. 0  .and. count_monitor .gt. 0 ) then 
          
          
-
+         if ((damping_type.eq.1) .or. (damping_type.eq.3)) then
             call WRITE_OUTPUT(nmonitors_lst, mpi_id, el_monitor_lst, local_el_num, nelem_loc, &
                               con_spx_loc, con_nnz_loc, sdeg_mat, nmat, &
                               u2, u1, u0, v1, nnod_loc, &
@@ -2431,7 +2498,16 @@
                               tt1, deltat, deltat2, &
                               opt_out_var, count_monitor, monitor_file,debug, &
                               mu_nle, gamma_nle, b_instabilitycontrol, instability_maxval, b_instability_abort)  
-                                        
+         elseif ((damping_type.eq.2) .or. (damping_type.eq.4)) then
+            call WRITE_OUTPUT(nmonitors_lst, mpi_id, el_monitor_lst, local_el_num, nelem_loc, &
+                              con_spx_loc, con_nnz_loc, sdeg_mat, nmat, &
+                              u2, u1, u0, v1, nnod_loc, &
+                              stress, strain_damped, omega, &
+                              xr_monitor_lst, yr_monitor_lst, zr_monitor_lst, & 
+                              tt1, deltat, deltat2, &
+                              opt_out_var, count_monitor, monitor_file,debug, &
+                              mu_nle, gamma_nle, b_instabilitycontrol, instability_maxval, b_instability_abort)  
+         endif
          endif         
                         
       endif
@@ -2546,31 +2622,57 @@
    !  enddo
    !  close(2501)
 
-! Debug NLP                              
-   !  open(2501,file='oldstress.txt')
-   !  do id = 1,nnod_loc
-   !    write(2501,*) (oldstress(6*(id-1)+k11),k11=1,6)
-   !  enddo
-   !  close(2501)
+! ! Debug NLP             
+!     if (its.eq.3) then              
+!          open(2501,file='oldstress.txt')
+!          do id = 1,nnod_loc
+!             write(2501,*) (oldstress(6*(id-1)+k11),k11=1,6)
+!          enddo
+!          close(2501)
 
-   !  open(2501,file='oldstrain.txt')
-   !  do id = 1,nnod_loc
-   !    write(2501,*) (oldstrain(6*(id-1)+k11),k11=1,6)
-   !  enddo
-   !  close(2501)
+!          open(2501,file='oldstrain.txt')
+!          do id = 1,nnod_loc
+!             write(2501,*) (oldstrain(6*(id-1)+k11),k11=1,6)
+!          enddo
+!          close(2501)
 
-    open(2501,file='stress.txt')
-    do id = 1,nnod_loc
-      write(2501,*) (stress(6*(id-1)+k11),k11=1,6)
-    enddo
-    close(2501)
+!          open(2501,file='stress.txt')
+!          do id = 1,nnod_loc
+!             write(2501,*) (stress(6*(id-1)+k11),k11=1,6)
+!          enddo
+!          close(2501)
 
-    open(2501,file='strain.txt')
-    do id = 1,nnod_loc
-      write(2501,*) (strain(6*(id-1)+k11),k11=1,6)
-    enddo
-    close(2501)
-    if (its.eq.0) call EXIT()
+!          open(2501,file='strain.txt')
+!          do id = 1,nnod_loc
+!             write(2501,*) (strain(6*(id-1)+k11),k11=1,6)
+!          enddo
+!          close(2501)
+
+!          call EXIT()
+!       endif
+   !  if (its.eq.0) then
+   !    ! For Now, this only doesnot work for DG, or mesh with different Spectral Degree
+   !    nn = sdeg_mat(con_spx_loc(con_spx_loc(0))) + 1
+   !    allocate(vtk_numbering(nn*nn*nn))
+
+   !    call VTK_NODE_NUMBERING_MAP(nn, vtk_numbering)
+
+   !    if (mpi_id.eq.0) call WRITE_PVD_TIMEDATA(mpi_np, nts, 4*ndt_mon_lst,deltat)
+
+   !    ! call WRITE_VTK_MECH_PROP(nnod_loc, con_nnz_loc, con_spx_loc, nmat, sdeg_mat, &
+   !    !                      prop_mat,tag_mat, nmat_nlp, tag_mat_nlp, &
+   !    !                      xx_spx_loc, yy_spx_loc, zz_spx_loc, mpi_id , nn, vtk_numbering)
+   !    ! call EXIT()
+   !  endif
+
+   !  if (mod(its,4*ndt_mon_lst) .eq. 0) then
+   !    call WRITE_VTU_TIMEDATA(nnod_loc, con_nnz_loc, con_spx_loc, &
+   !                         nmat, sdeg_mat, prop_mat,tag_mat, &
+   !                         xx_spx_loc, yy_spx_loc, zz_spx_loc, mpi_id, mpi_np, &
+   !                         nn, vtk_numbering, &
+   !                         its, strain, stress, u0)
+   !  endif
+
          
 !---------------------------------------------------------------------------
 !     COMPUTE ERROR

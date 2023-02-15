@@ -170,7 +170,7 @@
                     allocate(nlp_elem(ie)%Sa1(nn,nn,nn,mpii_mat(im_nlp)%nspring,6))
                     nlp_elem(ie)%activefsur = 0;
                     nlp_elem(ie)%F2 = 0.d0;
-                    nlp_elem(ie)%Sa1 = 0.001;
+                    nlp_elem(ie)%Sa1 = 0.000;
                 endif
             enddo
         enddo

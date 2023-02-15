@@ -83,12 +83,12 @@
 
       
       ! Total Strain - Elastic (at all GLL nodes in 1 element)
-      strain_xx = 0.d0!duxdx;      !strain_xy = 0.d0!(duxdy + duydx)/2.d0
-      strain_yy = 0.d0!duydy;      !strain_yz = 0.d0!(duydz + duzdy)/2.d0
-      strain_zz = 0.d0!duzdz;      !strain_xz = (duzdx + duxdz)/2.d0
-      strain_xy = 0.d0!(duxdy + duydx)/2.d0
-      strain_yz = 0.d0!(duydz + duzdy)/2.d0
-      strain_xz = (duzdx + duxdz)/2.d0
+      strain_xx = duxdx;      !strain_xy = 0.d0!(duxdy + duydx)/2.d0
+      strain_yy = duydy;      !strain_yz = 0.d0!(duydz + duzdy)/2.d0
+      strain_zz = duzdz;      !strain_xz = (duzdx + duxdz)/2.d0
+      strain_xy = (duxdy + duydx)
+      strain_yz = (duydz + duzdy)
+      strain_xz = (duzdx + duxdz)
 
       strain_vol = (strain_xx + strain_yy + strain_zz)
 
@@ -159,9 +159,9 @@
                     stress_xx(p,q,r) = lambda_comp_stress + 2*Ms(p,q,r)*strain_xx(p,q,r) - sum_relaxfcn_xx;
                     stress_yy(p,q,r) = lambda_comp_stress + 2*Ms(p,q,r)*strain_yy(p,q,r) - sum_relaxfcn_yy;
                     stress_zz(p,q,r) = lambda_comp_stress + 2*Ms(p,q,r)*strain_zz(p,q,r) - sum_relaxfcn_zz;
-                    stress_xy(p,q,r) = 2*Ms(p,q,r)* (strain_xy(p,q,r) - sum_relaxfcn_xy)
-                    stress_yz(p,q,r) = 2*Ms(p,q,r)* (strain_yz(p,q,r) - sum_relaxfcn_yz)
-                    stress_zx(p,q,r) = 2*Ms(p,q,r)* (strain_xz(p,q,r) - sum_relaxfcn_xz)
+                    stress_xy(p,q,r) = Ms(p,q,r)* (strain_xy(p,q,r) - sum_relaxfcn_xy)
+                    stress_yz(p,q,r) = Ms(p,q,r)* (strain_yz(p,q,r) - sum_relaxfcn_yz)
+                    stress_zx(p,q,r) = Ms(p,q,r)* (strain_xz(p,q,r) - sum_relaxfcn_xz)
 
                     if ( (ie.eq.1) .and. ((p+q+r).eq.3) ) then
                         !dum5 = lambda_comp_stress + 2*Ms(p,q,r)*strain_xx(p,q,r);
@@ -220,9 +220,9 @@
         stress_vol = (sxx + syy + szz)/3.d0
         strain_vol = stress_vol / Kbulk         !component-wise matrix division
 
-        strain_xx = 0.5d0* (sxx - stress_vol)/Mu + strain_vol
-        strain_yy = 0.5d0* (syy - stress_vol)/Mu + strain_vol
-        strain_zz = 0.5d0* (szz - stress_vol)/Mu + strain_vol
+        strain_xx = 0.5d0* (sxx - stress_vol)/Mu + (strain_vol/3.d0)
+        strain_yy = 0.5d0* (syy - stress_vol)/Mu + (strain_vol/3.d0)
+        strain_zz = 0.5d0* (szz - stress_vol)/Mu + (strain_vol/3.d0)
         ! strain_yz = 0.5d0* (syz/Mu)
         ! strain_xz = 0.5d0* (szx/Mu)
         ! strain_xy = 0.5d0* (sxy/Mu)

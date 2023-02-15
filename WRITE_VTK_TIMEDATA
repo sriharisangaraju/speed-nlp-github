@@ -1,0 +1,156 @@
+!    Copyright (C) 2012 The SPEED FOUNDATION
+!    Author: Ilario Mazzieri
+!
+!    This file is part of SPEED.
+!
+!    SPEED is free software; you can redistribute it and/or modify it
+!    under the terms of the GNU Affero General Public License as
+!    published by the Free Software Foundation, either version 3 of the
+!    License, or (at your option) any later version.
+!
+!    SPEED is distributed in the hope that it will be useful, but
+!    WITHOUT ANY WARRANTY; without even the implied warranty of
+!    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+!    Affero General Public License for more details.
+!
+!    You should have received a copy of the GNU Affero General Public License
+!    along with SPEED.  If not, see <http://www.gnu.org/licenses/>.
+
+
+!> @brief ...Writing VTK file to visualise in Paraview
+!! @author Srihari Sangaraju
+!> @date July, 2021 
+!> @version 1.0
+
+!> @param[in] loc_n_num. Global node number of 'i'th local node is loc_n_num(i)
+!> @param[in] nn_loc. No. of nodes in Local/Current Partition
+!> @param[in] nmat_nhe No. of Blocks specified with NHE case
+!> @param[in] nhe_mat Tag/Labels of Blocks where NHE has to be implemented
+!> @param[in] xs_loc x-coordinate of spectral nodes
+!> @param[in] ys_loc y-coordinate of spectral nodes
+!> @param[in] zs_loc z-coordinate of spectral nodes
+    subroutine  WRITE_VTK_TIMEDATA(nn_loc, cs_nnz_loc, cs_loc, &
+                                  nmat, sdeg, prop_mat, tag_mat, &
+                                  xx_loc, yy_loc, zz_loc, mpi_id, nn, vtk_numbering_map, &
+                                  its, strain, stress, disp )
+
+      implicit none
+
+      character*70 :: file_name, temp_char
+
+      integer*4 :: nel_loc, nn_loc, cs_nnz_loc, mpi_id, nmat, nn, its
+      integer*4 :: ie, inode, im, i
+      integer*4 :: unit_mpi
+      integer*4, dimension(nmat) :: sdeg, tag_mat
+      integer*4, dimension(nn*nn*nn) :: vtk_numbering_map, node_numbering_vtkwrite, loc_nod_indx
+      integer*4, dimension(0:cs_nnz_loc) :: cs_loc
+      
+      real*8, dimension(nmat,4) :: prop_mat
+      real*8, dimension(nn_loc) :: xx_loc, yy_loc, zz_loc
+      real*8, dimension(6*nn_loc) :: strain, stress 
+      real*8, dimension(3*nn_loc) :: disp
+
+
+      nel_loc = cs_loc(0) - 1
+
+      write(temp_char,*)'(i12,',nn*nn*nn,'i12)'
+      write(file_name,'(a,i5.5,a,i8.8,a)') './VTKOUT/SNAPSHOT_PROC_',mpi_id,'ITER_',its,'.vtk'
+      unit_mpi = 2500 + mpi_id                                 
+      
+      !----------------------------------------------------------------------
+      open(unit_mpi,file=file_name)
+      write(unit_mpi,'(a)') '# vtk DataFile Version 3.1'
+      write(unit_mpi,'(a)') 'TIME SNAPSHOT VTK file'
+      write(unit_mpi,'(a)') 'ASCII'
+      write(unit_mpi,'(a)') 'DATASET UNSTRUCTURED_GRID'
+      write(unit_mpi, '(a,i12,a)') 'POINTS ', nn_loc, ' float'
+
+      ! Node Coordinates
+      do inode=1,nn_loc
+          write(unit_mpi,'(3e20.12)') xx_loc(inode),yy_loc(inode),zz_loc(inode)
+      enddo
+      write(unit_mpi,*) ''
+
+      ! Connectivity (note: node indices for vtk start at 0)
+      write(unit_mpi,'(a,i12,i12)') "CELLS ",nel_loc,nel_loc*9
+
+      do ie=1,nel_loc
+        im = cs_loc(cs_loc(ie -1) + 0 )
+        ! nn = sdeg(im) +1
+        do i=1,(nn*nn*nn)
+            loc_nod_indx(i) = cs_loc(cs_loc(ie -1) + i) - 1
+        enddo
+        do i=1,(nn*nn*nn)
+            node_numbering_vtkwrite(i) = loc_nod_indx(vtk_numbering_map(i))
+        enddo
+
+        ! HEX 8 
+        ! Node Numbering Order for VTK
+        !
+        !   7----6
+        !   /|   /|
+        ! 4----5 |
+        ! | 3--|-2
+        ! |/   |/
+        ! 0----1
+        !
+        ! !When using Python scripts to export mesh from cubit (HEX8)
+        ! write(unit_mpi,'(9i12)') 8, ic2, ic6, ic7, ic3, ic1, ic5, ic8, ic4
+
+        ! !When using NCDUMPS to export mesh from cubit (HEX8)
+        ! write(unit_mpi,'(9i12)') 8, ic1, ic2, ic3, ic4, ic5, ic6, ic7, ic8
+
+        ! Higher order Lagrange Hexahedron (Vtk Type 72)
+        write(unit_mpi,temp_char) nn*nn*nn, (node_numbering_vtkwrite(i), i=1,(nn*nn*nn))
+
+      enddo
+      write(unit_mpi,*) ''
+
+      ! vtkCellType: hexahedrons (ID = 12 for linear 8 noded hex
+      ! ID = 29 for HEX27 (triquadratic Hex)
+      ! 72 for lagrange-higher order hex
+      ! Reference : https://vtk.org/doc/nightly/html/vtkCellType_8h_source.html
+      ! https://visit-sphinx-github-user-manual.readthedocs.io/en/v3.3.0/data_into_visit/VTKFormat.html
+      write(unit_mpi,'(a,i12)') "CELL_TYPES ",nel_loc
+      write(unit_mpi,'(6i12)') (72,ie=1,nel_loc)
+      write(unit_mpi,*) ''
+
+      ! Writing node data------------------------------------------------------------------
+      write(unit_mpi,'(a,i12)') "POINT_DATA ",nn_loc
+
+      ! Strain
+      write(unit_mpi,'(a)') 'TENSORS STRAIN float'
+      write(unit_mpi,'(a)') "LOOKUP_TABLE default"
+      do inode = 1,nn_loc
+          im = 6*(inode-1)
+          write(unit_mpi,*) strain(im+1), strain(im+4), strain(im+6)
+          write(unit_mpi,*) strain(im+4), strain(im+2), strain(im+5)
+          write(unit_mpi,*) strain(im+6), strain(im+5), strain(im+3)
+      enddo
+      write(unit_mpi,*) ''
+
+      ! Stress
+      write(unit_mpi,'(a)') 'TENSORS STRESS float'
+      write(unit_mpi,'(a)') "LOOKUP_TABLE default"
+      do inode = 1,nn_loc
+          im = 6*(inode-1)
+          write(unit_mpi,*) stress(im+1), stress(im+4), stress(im+6)
+          write(unit_mpi,*) stress(im+4), stress(im+2), stress(im+5)
+          write(unit_mpi,*) stress(im+6), stress(im+5), stress(im+3)
+      enddo
+      write(unit_mpi,*) ''
+
+      ! Displacement
+      write(unit_mpi,'(a)') 'VECTORS DISP float'
+      write(unit_mpi,'(a)') "LOOKUP_TABLE default"
+      do inode = 1,nn_loc
+          im = 3*(inode-1)
+          write(unit_mpi,*) disp(im+1), disp(im+2), disp(im+3)
+      enddo
+      write(unit_mpi,*) ''
+
+      !-----------------------------------------------------------------------------------
+
+      close(unit_mpi)   
+
+    end subroutine WRITE_VTK_TIMEDATA

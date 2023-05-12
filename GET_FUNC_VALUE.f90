@@ -51,6 +51,7 @@
       real*8 :: PI,t_t0,t0,t1,v0,v1,omega, fp, fac
       real*8 :: TAU,scaling,HDUR 
       real*8 :: amp, ps0, tplus, alpha,time,beta2,dist,vel
+      real*8 :: wp_w, ts_w
       
       real*8, dimension(nb_data_fnc) :: data_fnc
       real*8, dimension(1) :: valmax
@@ -336,6 +337,13 @@
           
          case(101) 
           GET_FUNC_VALUE = time
+
+         case(47)   !Gabor Wavelet
+           wp_w = (8.d0*datan(1.d0)) * data_fnc(ind_fnc(id_fnc));
+           ts_w = 0.45 * data_fnc(ind_fnc(id_fnc)+1) / data_fnc(ind_fnc(id_fnc));
+           GET_FUNC_VALUE = dexp(-(wp_w*(time-ts_w)/data_fnc(ind_fnc(id_fnc)+1))**2) * &
+                            dcos(data_fnc(ind_fnc(id_fnc)+2) + wp_w*(time-ts_w))
+
          case default
            GET_FUNC_VALUE = 0.d0
       

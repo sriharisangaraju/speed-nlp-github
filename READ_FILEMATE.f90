@@ -699,6 +699,13 @@
                     ind_fnc(ifunc +1) = ind_fnc(ifunc) + 1
                  read(inline(ileft:iright),*) dummy,dummy,&
                     (dat_fnc(j), j = ind_fnc(ifunc),ind_fnc(ifunc +1) -1)                    
+
+               case(47) !Gabor Wavelet
+                    ind_fnc(ifunc +1) = ind_fnc(ifunc) + 3
+                    ! Peak_frequency, Gamma, PhaseDifference(radians)
+                 read(inline(ileft:iright),*) dummy,dummy,&
+                    (dat_fnc(j), j = ind_fnc(ifunc),ind_fnc(ifunc +1) -1)                    
+
               case(773)
                  read(inline(ileft:iright),*)dummy,dummy,ndat_fnc,fileinput
                  ind_fnc(ifunc +1) = ind_fnc(ifunc) + ndat_fnc

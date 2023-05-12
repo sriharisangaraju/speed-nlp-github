@@ -513,6 +513,10 @@
                         nnod_macro,xx_macro, yy_macro, zz_macro,  &
                         nelem,con,nface,con_bc)
 
+      if ( (mpi_id.eq.0) .and. (nmat_nlp.gt.0) .and. (mpi_np.gt.1) ) then
+        CALL MAKE_ELEMENT_WEIGHTS(nmat_nlp, tag_mat_nlp, nelem, con)
+      endif
+
       if(mpi_id .eq. 0) write(*,'(A)') 'Read.'
       if(mpi_id .eq. 0) write(*,'(A)')
      

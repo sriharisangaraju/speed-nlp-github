@@ -142,7 +142,7 @@
                             !strain_max = 10.d0**( 2+dum_log)
 
                             strain_min = 1.0d-6
-                            strain_max = 1.0d-1                        
+                            strain_max = 1.0d-2                        
                             call nonlinear_mu_degradation_hyperbola(mpii_mat(im_nlp)%nspring, strain_min, strain_max, &
                                                             ref_strain, mpii_mat(im_nlp)%Gmax, &
                                                             mpii_mat(im_nlp)%spr_strain, mpii_mat(im_nlp)%spr_GbyGmax,&
@@ -168,22 +168,30 @@
                     allocate(nlp_elem(ie)%activefsur(nn,nn,nn))
                     allocate(nlp_elem(ie)%F2(nn,nn,nn,mpii_mat(im_nlp)%nspring))
                     allocate(nlp_elem(ie)%Sa1(nn,nn,nn,mpii_mat(im_nlp)%nspring,6))
+                    allocate(nlp_elem(ie)%oldstrain(nn,nn,nn,6))
+                    allocate(nlp_elem(ie)%oldstress(nn,nn,nn,6))
                     nlp_elem(ie)%activefsur = 0;
                     nlp_elem(ie)%F2 = 0.d0;
                     nlp_elem(ie)%Sa1 = 0.000;
+                    nlp_elem(ie)%oldstrain = 0.d0;
+                    nlp_elem(ie)%oldstress = 0.d0;
                 endif
             enddo
         enddo
 
-        do im_nlp = 1, nmat_nlp
-            write(*,*) 'imat = ',im_nlp, 'Gmax = ',mpii_mat(im_nlp)%Gmax, 'ref_strain = ',ref_strain
+        ! do im_nlp = 1, nmat_nlp
+        !     open(78,file='spring_parameters.txt')
+        !     write(78,*) 'imat = ',im_nlp, 'Gmax = ',mpii_mat(im_nlp)%Gmax, 'ref_strain = ',ref_strain
+        !     write(78,*) 'strains, G/Gmax, Yield Stress, CNinv '
             
-            do ispr=1,(mpii_mat(im_nlp)%nspring-1)
-                write(*,*) 'Strains = ',mpii_mat(im_nlp)%spr_strain(ispr) ,'G/Gmax = ', &
-                    mpii_mat(im_nlp)%spr_GbyGmax(ispr), 'Yield Stress = ',mpii_mat(im_nlp)%spr_yldstress(ispr) ,&
-                    'CNinv = ',  mpii_mat(im_nlp)%spr_CNinv(ispr)
-            enddo
-        enddo
+        !     do ispr=1,(mpii_mat(im_nlp)%nspring-1)
+        !         write(78,*) mpii_mat(im_nlp)%spr_strain(ispr), mpii_mat(im_nlp)%spr_GbyGmax(ispr), &
+        !             mpii_mat(im_nlp)%spr_yldstress(ispr), mpii_mat(im_nlp)%spr_CNinv(ispr)
+        !     enddo
+
+        !     write(78,*) ' '
+        !     close(78)
+        ! enddo
 
 
         if (mpi_id.eq.0) write(*,'(A)')'Done.' 
@@ -210,14 +218,20 @@
         real*8, dimension(nspr-1), intent(out) :: cninv
         real*8 :: xl, xu, dx
 
+        strain(1) = 10.0d0**(-9);
+        strain(nspr) = 10.0d0**(-1);
+
         xl    = dlog10(stin_min)
         xu    = dlog10(stin_max)
-        dx    = (xu-xl)/(nspr- 1)  
+        dx    = (xu-xl)/(nspr- 3)  
 
         ! Yield Stress of 1st spring is 0. Because this spring is made active in initial conditions (linear behaviour)
-        do i = 1,nspr             
+        do i = 2,(nspr-1)             
             strain(i) = 10.0d0**(xl + dx*(i- 1))
-            mu_deg_val(i)     = ( 1.0d0/( 1.0d0 + dabs(strain(i)/ref_stin) ) )       !G/Gmax Value
+        enddo
+
+        do i = 1,nspr
+            mu_deg_val(i)    = ( 1.0d0/( 1.0d0 + dabs(strain(i)/ref_stin) ) )       !G/Gmax Value
             yldstress(i)     = (mu_deg_val(i)*mu_max) * strain(i)                     
         enddo
 

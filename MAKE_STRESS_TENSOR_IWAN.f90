@@ -58,7 +58,8 @@
 
         real*8, dimension(nspr)   , intent(inout) :: spr_yldstress
         real*8, dimension(nspr-1) , intent(inout) :: spr_CNinv
-        real*8, dimension(6*nnloc), intent(in)    :: oldstrain, oldstress
+        !real*8, dimension(6*nnloc), intent(in)    :: oldstrain, oldstress
+        real*8, dimension(nn,nn,nn,6), intent(in) ::  oldstrain, oldstress
         real*8, dimension(nn,nn,nn), intent(in) ::  strainxx_el, strainyy_el, strainzz_el, &
                                                     strainxy_el, strainyz_el, strainzx_el, &
                                                     mu_el, lambda_el, Kbulk
@@ -94,26 +95,26 @@
 
 
                     ! nodal stress/strain tensor alignment = [xx yy zz xy yz zx]
-                    node_dstress = 0;
+                    node_dstress = 0.d0;
 
                     ! Increment in Total Strain
-                    node_deps(1) = strainxx_el(i,j,k) - oldstrain(iaz+1);
-                    node_deps(2) = strainyy_el(i,j,k) - oldstrain(iaz+2);
-                    node_deps(3) = strainzz_el(i,j,k) - oldstrain(iaz+3);
-                    node_deps(4) = strainxy_el(i,j,k) - oldstrain(iaz+4);
-                    node_deps(5) = strainyz_el(i,j,k) - oldstrain(iaz+5);
-                    node_deps(6) = strainzx_el(i,j,k) - oldstrain(iaz+6);
+                    node_deps(1) = strainxx_el(i,j,k) - oldstrain(i,j,k,1);
+                    node_deps(2) = strainyy_el(i,j,k) - oldstrain(i,j,k,2);
+                    node_deps(3) = strainzz_el(i,j,k) - oldstrain(i,j,k,3);
+                    node_deps(4) = strainxy_el(i,j,k) - oldstrain(i,j,k,4);
+                    node_deps(5) = strainyz_el(i,j,k) - oldstrain(i,j,k,5);
+                    node_deps(6) = strainzx_el(i,j,k) - oldstrain(i,j,k,6);
                     node_epsm   = (node_deps(1) + node_deps(2)+node_deps(3))/ 3.d0   ! Hydrostatic/ mean strain
 
                     ! Variables for Vonmises Criteria - Deviatoric Stress Tensor (previous Time step)
                     ! node_dsigm   = mpii_lay%Kmax * node_epsm* 3.d0      !Volumetric/Mean stress
-                    node_dsigm   = (oldstress(iaz+1) + oldstress(iaz+2) + oldstress(iaz+3))/3.d0 !Volumetric/Mean stress
-                    node_S1(1) = oldstress(iaz+1) - node_dsigm; 
-                    node_S1(2) = oldstress(iaz+2) - node_dsigm; 
-                    node_S1(3) = oldstress(iaz+3) - node_dsigm; 
-                    node_S1(4) = oldstress(iaz+4); 
-                    node_S1(5) = oldstress(iaz+5); 
-                    node_S1(6) = oldstress(iaz+6); 
+                    node_dsigm   = (oldstress(i,j,k,1) + oldstress(i,j,k,2) + oldstress(i,j,k,3))/3.d0 !Volumetric/Mean stress
+                    node_S1(1) = oldstress(i,j,k,1) - node_dsigm; 
+                    node_S1(2) = oldstress(i,j,k,2) - node_dsigm; 
+                    node_S1(3) = oldstress(i,j,k,3) - node_dsigm; 
+                    node_S1(4) = oldstress(i,j,k,4); 
+                    node_S1(5) = oldstress(i,j,k,5); 
+                    node_S1(6) = oldstress(i,j,k,6); 
 
                     ! Variables for Vonmises Criteria - Hardening rule - origin/back stress
                     node_Sa1(1:nspr,1:6) = Sa1(i,j,k,1:nspr,1:6);
@@ -133,12 +134,12 @@
                     !             node_deps, node_epsm, node_S1, node_Sa1, node_F2, &
                     !             mpii_lay%spr_yldstress, mpii_lay%spr_CNinv, active_fsur(i,j,k), node_dstress, in)
 
-                    if (its.eq.0) then
-                        do ispr = 1,nspr
-                            spr_yldstress(ispr) = mpii_lay%spr_strain(ispr) * mpii_lay%spr_GbyGmax(ispr) * mu_el(i,j,k)
-                        enddo
-                        call CN_INVERSE(nspr, mu_el(i,j,k), mpii_lay%spr_strain, spr_yldstress, spr_CNinv)
-                    endif
+                    ! if (its.eq.0) then
+                    !     do ispr = 1,nspr
+                    !         spr_yldstress(ispr) = mpii_lay%spr_strain(ispr) * mpii_lay%spr_GbyGmax(ispr) * mu_el(i,j,k)
+                    !     enddo
+                    !     call CN_INVERSE(nspr, mu_el(i,j,k), mpii_lay%spr_strain, spr_yldstress, spr_CNinv)
+                    ! endif
                     
                     call NEOIWAN(its, nspr, lambda_el(i,j,k), mu_el(i,j,k),  mu_el(i,j,k), Kbulk(i,j,k),&
                                 node_deps, node_epsm, node_S1, node_Sa1, node_F2, &
@@ -146,9 +147,9 @@
 
                     ! Updating the required  parameters at node level
                     !Arrainging Total Stresses (Stress_new = Stress_old + stressIncrement)
-                    sxx_el(i,j,k) = oldstress(iaz+1) + node_dstress(1);  sxy_el(i,j,k) = oldstress(iaz+4) + node_dstress(4);
-                    syy_el(i,j,k) = oldstress(iaz+2) + node_dstress(2);  syz_el(i,j,k) = oldstress(iaz+5) + node_dstress(5);
-                    szz_el(i,j,k) = oldstress(iaz+3) + node_dstress(3);  szx_el(i,j,k) = oldstress(iaz+6) + node_dstress(6);
+                    sxx_el(i,j,k) = oldstress(i,j,k,1) + node_dstress(1);  sxy_el(i,j,k) = oldstress(i,j,k,4) + node_dstress(4);
+                    syy_el(i,j,k) = oldstress(i,j,k,2) + node_dstress(2);  syz_el(i,j,k) = oldstress(i,j,k,5) + node_dstress(5);
+                    szz_el(i,j,k) = oldstress(i,j,k,3) + node_dstress(3);  szx_el(i,j,k) = oldstress(i,j,k,6) + node_dstress(6);
 
                     ! Von-mises criteria parameters
                     Sa1(i,j,k,1:nspr,1:6) = node_Sa1(1:nspr,1:6);

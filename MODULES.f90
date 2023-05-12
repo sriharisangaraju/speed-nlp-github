@@ -753,6 +753,7 @@ module nlp_element_def
                   real*8, dimension(:,:,:,:),   allocatable :: F2             ! Von Mises Stress
                   real*8, dimension(:,:,:,:,:), allocatable :: Sa1            ! Origin(back stress) for Hardening rule
                   real*8, dimension(:), allocatable :: spr_yldstress, spr_CNinv
+                  real*8, dimension(:,:,:,:), allocatable :: oldstress, oldstrain
       end type nlp_element
 end module nlp_element_def
 

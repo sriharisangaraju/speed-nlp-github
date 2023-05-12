@@ -70,7 +70,11 @@
               else
       
                  write(*,'(A)') 'Making new partitioning...'
-                 call MESH_PARTITIONING(mpi_file,nelem,nnod_macro,mpi_np,con,0)      
+                 if (nmat_nlp.eq.0) then
+                     call MESH_PARTITIONING(mpi_file,nelem,nnod_macro,mpi_np,con,0)      
+                 elseif (nmat_nlp.gt.0) then
+                     call MESH_PARTITIONING(mpi_file,nelem,nnod_macro,mpi_np,con,1)      
+                 endif
 !                call MPI_BARRIER(mpi_comm, mpi_ierr)
                  !sustitute this part adding output elem_domain in mesh partitioning
                  unit_part = 400                                 
@@ -347,7 +351,8 @@
               close(unit_mpi)        
 
 
-           deallocate(con_spx_loc, con_spx_bc_loc, local_el_num)
+           deallocate(con_spx_loc, local_el_num)
+           if (nface.gt.0) deallocate(con_spx_bc_loc)
 
           enddo
 

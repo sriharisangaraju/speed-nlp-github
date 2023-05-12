@@ -116,7 +116,7 @@
      !!!--------------------------------------------------------------------!!!
   
 
-      if(w_yn .eq. 0) then
+      ! if(w_yn .eq. 0) then
          if(len_trim(mpi_file) .ne. 70) then                                                                                  
             u_name = mpi_file(1:len_trim(mpi_file)) // '/elemdomain.mpi'
          else 
@@ -131,7 +131,7 @@
          enddo
          close(u_mpi)
 
-!       else
+      ! else
 !
 !         if(len_trim(mpi_file) .ne. 70) then                                                                                  
 !            u_name = mpi_file(1:len_trim(mpi_file)) // '/final.part'
@@ -147,8 +147,43 @@
 !         enddo
 !         close(u_mpi)
 
-       endif       
+      !  endif       
       
       return
       
       end subroutine MESH_PARTITIONING
+
+
+
+
+
+
+
+
+!************************ Writing Element Weights for Partition ********************
+! Author: Srihari Sangaraju
+
+      subroutine MAKE_ELEMENT_WEIGHTS(nb_mat_nlp,lab_mat_nlp,nb_hexa, con_hexa)
+
+      implicit none
+      
+      integer*4, intent(in) :: nb_mat_nlp, nb_hexa
+      integer*4, intent(in), dimension(nb_mat_nlp) :: lab_mat_nlp
+      integer*4, intent(in), dimension(nb_hexa,9) :: con_hexa
+
+      integer*4 :: ielem,imat,elem_wtg
+      
+      open(656,file='element.wgt')
+      write(656,*) nb_hexa
+      do ielem = 1, nb_hexa
+         elem_wtg = 7
+         do imat = 1,nb_mat_nlp
+            if (lab_mat_nlp(imat).eq.con_hexa(ielem,1)) elem_wtg = 10
+         enddo
+         write(656,*) ielem, elem_wtg
+      enddo
+      close(656)
+      
+      return
+
+      end subroutine MAKE_ELEMENT_WEIGHTS

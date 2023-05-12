@@ -236,8 +236,8 @@
                case(8,9) 
                  nb_func_data = nb_func_data + 1
 
-               case(12) 
-                 ! SIGMOIDAL FUNC
+               case(12,47) 
+                 ! 12 = SIGMOIDAL FUNC;    47 = Gabor Wavelet
                  nb_func_data = nb_func_data + 3
                case(13) 
                  ! GRENOBLE BENCHMARK

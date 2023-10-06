@@ -2712,7 +2712,7 @@
 
       call VTK_NODE_NUMBERING_MAP(nn, vtk_numbering)
 
-      if (mpi_id.eq.0) call WRITE_PVD_TIMEDATA(mpi_np, nts, 4*ndt_mon_lst,deltat)
+      if (mpi_id.eq.0) call WRITE_PVD_TIMEDATA(mpi_np, nts, 10*ndt_mon_lst,deltat)
 
       ! call WRITE_VTK_MECH_PROP(nnod_loc, con_nnz_loc, con_spx_loc, nmat, sdeg_mat, &
       !                      prop_mat,tag_mat, nmat_nlp, tag_mat_nlp, &

@@ -77,7 +77,7 @@
       do ie=1,nel_loc
         im = cs_loc(cs_loc(ie -1) + 0 )
         nn = sdeg(im) +1
-
+        ! This node numbering works for Meshes generated using Cubit 13.1
         ic1 = cs_loc(cs_loc(ie -1) + nn*nn*(1 -1) + nn*(1 -1) + 1) - 1
         ic2 = cs_loc(cs_loc(ie -1) + nn*nn*(1 -1) + nn*(1 -1) + nn) - 1
         ic3 = cs_loc(cs_loc(ie -1) + nn*nn*(1 -1) + nn*(nn -1) + nn) - 1

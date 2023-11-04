@@ -140,6 +140,7 @@
                if (mpi_id.eq.0) write(*,*) 'Node :', sour_node_sism(k,i)
                if (mpi_id.eq.0) write(*,*) 'Position :', pos_sour_node_x(k,i), pos_sour_node_y(k,i), pos_sour_node_z(k,i)  
                if (mpi_id.eq.0) write(*,*)  'Distance from Actual Node [m] = ', dist_sour_node_sism(k,i)
+               if (mpi_id.eq.0) write(*,*)  'Seismic Moment [Nm] = ', val_sism_el(k,13), val_sism_el(k,14), val_sism_el(k,15)
             enddo     
             if (mpi_id.eq.0) write(*,'(A)')
 

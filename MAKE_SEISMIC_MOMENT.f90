@@ -164,16 +164,16 @@
                                     sxy(p,q,r) = sxy(p,q,r) - VAL_SISM * facsmom(check_ns(i,3),6)  
 
 
-                                    ! inquire(file="sft_th_debug.txt", exist=exist)
-                                    ! if (exist) then
-                                    !   open(82, file="sft_th_debug.txt", status="old", position="append", action="write")
-                                    ! else
-                                    !   open(82, file="sft_th_debug.txt", status="new", action="write")
-                                    ! end if
-                                    ! write(82,*) 'time', t_stress, 'funct_value', GET_FUNC_VALUE_SISM(nf,func_type,func_indx,&
-                                    !                                  func_data, nfdata, fn,t_stress,check_dist_ns(i,1), &
-                                    !                                  tausmom(check_ns(i,3),1))
-                                    ! close(82)
+                                    inquire(file="sft_th_debug.txt", exist=exist)
+                                    if (exist) then
+                                      open(82, file="sft_th_debug.txt", status="old", position="append", action="write")
+                                    else
+                                      open(82, file="sft_th_debug.txt", status="new", action="write")
+                                    end if
+                                    write(82,*) 'time', t_stress, 'funct_value', GET_FUNC_VALUE_SISM(nf,func_type,func_indx,&
+                                                                     func_data, nfdata, fn,t_stress,check_dist_ns(i,1), &
+                                                                     tausmom(check_ns(i,3),1))
+                                    close(82)
 
 
                                     endif ! if ((tag_func(fn).eq.(check_node_sism(i,2))) &...        

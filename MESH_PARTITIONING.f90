@@ -176,7 +176,7 @@
       open(656,file='element.wgt')
       write(656,*) nb_hexa
       do ielem = 1, nb_hexa
-         elem_wtg = 7
+         elem_wtg = 5
          do imat = 1,nb_mat_nlp
             if (lab_mat_nlp(imat).eq.con_hexa(ielem,1)) elem_wtg = 10
          enddo

@@ -169,10 +169,10 @@
                                       open(82, file="sft_th_debug.txt", status="old", position="append", action="write")
                                     else
                                       open(82, file="sft_th_debug.txt", status="new", action="write")
+                                       write(82,*) 'facsmom', facsmom(check_ns(i,3),1), facsmom(check_ns(i,3),2), facsmom(check_ns(i,3),3)
+                                       write(82,*) 'facsmom', facsmom(check_ns(i,3),4), facsmom(check_ns(i,3),5), facsmom(check_ns(i,3),6)
                                     end if
-                                    write(82,*) 'time', t_stress, 'funct_value', GET_FUNC_VALUE_SISM(nf,func_type,func_indx,&
-                                                                     func_data, nfdata, fn,t_stress,check_dist_ns(i,1), &
-                                                                     tausmom(check_ns(i,3),1))
+                                    write(82,*) 'time', t_stress, 'funct_value', VAL_SISM
                                     close(82)
 
 

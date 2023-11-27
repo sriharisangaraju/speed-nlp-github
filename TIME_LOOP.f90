@@ -2705,6 +2705,8 @@
 
 !          call EXIT()
 !       endif
+
+   if (vtkflag) then
     if (its.eq.0) then
       ! For Now, this only doesnot work for DG, or mesh with different Spectral Degree
       nn = sdeg_mat(con_spx_loc(con_spx_loc(0))) + 1
@@ -2720,13 +2722,14 @@
       ! call EXIT()
     endif
 
-    if (mod(its,10*ndt_mon_lst) .eq. 0) then
+    if (mod(its,ndt_vtk) .eq. 0) then
       call WRITE_VTU_TIMEDATA(nnod_loc, con_nnz_loc, con_spx_loc, &
                            nmat, sdeg_mat, prop_mat,tag_mat, &
                            xx_spx_loc, yy_spx_loc, zz_spx_loc, mpi_id, mpi_np, &
                            nn, vtk_numbering, &
                            its, strain, stress, u0)
     endif
+   endif
 
          
 !---------------------------------------------------------------------------

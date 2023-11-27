@@ -72,7 +72,8 @@
                              monfile_lst,dg_c,pen_c, scheme, order, stages, testmode, &
                              ntime_err, time_err, damping_type, &
                              n_testcase, tag_testcase, &
-                             b_failoncoeffs, b_setuponly, b_failCFL, b_instabilitycontrol, instability_maxval)
+                             b_failoncoeffs, b_setuponly, b_failCFL, b_instabilitycontrol, instability_maxval, &
+                             vtkflag, ndt_vtk)
 
       use speed_exit_codes
 
@@ -95,6 +96,7 @@
       integer*4 :: n_lst, ntime_err, itime, n_testcase, tag_testcase
       integer*4 :: monfile_lst, damping_type
       integer*4 :: file_row = 0
+      integer*4 :: ndt_vtk
 
       integer*4, dimension (6) :: option_out_var 
 
@@ -116,6 +118,8 @@
       logical :: b_instabilitycontrol
       logical :: b_failoncoeffs, b_setuponly, b_failCFL
 
+      logical :: vtkflag
+
 
       im = 0;       is = 0;            itime = 0;
       n_pgm = 0;    monfile_pgm = 0                 
@@ -123,6 +127,8 @@
       n_testcase = 0;          
 
       time_err = 0      
+
+      vtkflag = .FALSE.
 
 
       open(40,file=headerfile)
@@ -269,6 +275,11 @@
             
            case('DEBUG')
              read(inline(ileft:iright),*) dummy            
+            
+           case('VTKWRITE')
+            ! If specified as "VTKWRITE T 100", 
+            ! VTKFILES will be written at every 100 time steps
+            read(inline(ileft:iright),*) vtkflag, ndt_vtk
 
            ! Fail if keyword is not recognised
            case default

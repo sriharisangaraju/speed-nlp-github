@@ -237,6 +237,9 @@ module speed_par
 
       ! NL - P Material
       logical :: nlp_pressdep_flag, nlp_effstress_flag
+
+      ! VTK output
+      logical :: vtkflag
       
 !************************************************************************************
 !                                    CHARACTERS
@@ -295,7 +298,7 @@ module speed_par
                    nnode_dom, nelem_dom, edgecut, &
                    nmat_nle, total_els, nvec, &
                    nargs, ntime_err, n_test, n_frac, &
-                   num_testcase, label_testcase, nmat_rnd, nmat_nhe, nmat_nlp
+                   num_testcase, label_testcase, nmat_rnd, nmat_nhe, nmat_nlp, ndt_vtk
                    
 ! 0/1 INTERGERS
       integer*4 :: file_mon_pgm, file_mon_lst, &
@@ -591,6 +594,7 @@ module speed_timeloop
                          ndt_mon_lst, nmonitors_lst, n_monitor_lst, el_monitor_lst, &                                        
                          xr_monitor_lst, yr_monitor_lst, zr_monitor_lst, &                                        
                          opt_out_var, monitor_file, bkp_file, &
+                         vtkflag, ndt_vtk, &
                             
                          !TESTMODE
                          testmode, ntime_err, time_error, debug, &
